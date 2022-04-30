@@ -1,11 +1,8 @@
 import argparse
 import os
-import copy
 import sys
-import time
 from datetime import datetime
 import torch
-import random
 import numpy as np
 from matplotlib import pyplot as plt
 from torch import nn, optim
@@ -17,6 +14,7 @@ from experiments.models_cnn import BaseCNN
 from experiments.train_helper import *
 from equations.PDEs import *
 
+
 def check_directory() -> None:
     """
     Check if log directory exists within experiments
@@ -25,6 +23,7 @@ def check_directory() -> None:
         os.mkdir(f'experiments/log')
     if not os.path.exists(f'models'):
         os.mkdir(f'models')
+
 
 def train(args: argparse,
           pde: PDE,
@@ -66,6 +65,7 @@ def train(args: argparse,
         losses = training_loop(model, unrolling, args.batch_size, optimizer, loader, graph_creator, criterion, device)
         if(i % args.print_interval == 0):
             print(f'Training Loss (progress: {i / graph_creator.t_res:.2f}): {torch.mean(losses)}')
+
 
 def test(args: argparse,
          pde: PDE,
