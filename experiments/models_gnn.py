@@ -228,6 +228,10 @@ class MP_PDE_Solver(torch.nn.Module):
 
         # Encoder and processor (message passing)
         node_input = torch.cat((u, pos_x, variables), -1)
+        # u: [node, time]
+        # pos_x: [node, 1]
+        # variables: [node, f]
+        # node_input: [node, time + pos_x.shape[-1] + f]
         h = self.embedding_mlp(node_input)
         for i in range(self.hidden_layer):
             h = self.gnn_layers[i](h, u, pos_x, variables, edge_index, batch)

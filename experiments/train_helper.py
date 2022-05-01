@@ -1,23 +1,25 @@
 import torch
 import random
-from torch import nn, optim
 from torch.utils.data import DataLoader
-from common.utils import HDF5Dataset, GraphCreator
-from equations.PDEs import *
+from common.utils import GraphCreator
 
-def training_loop(model: torch.nn.Module,
-                  unrolling: list,
-                  batch_size: int,
-                  optimizer: torch.optim,
-                  loader: DataLoader,
-                  graph_creator: GraphCreator,
-                  criterion: torch.nn.modules.loss,
-                  device: torch.cuda.device="cpu") -> torch.Tensor:
+
+def training_loop(
+        model: torch.nn.Module,
+        unrolling: list,
+        batch_size: int,
+        optimizer: torch.optim,
+        loader: DataLoader,
+        graph_creator: GraphCreator,
+        criterion: torch.nn.modules.loss,
+        device: torch.cuda.device = "cpu") -> torch.Tensor:
     """
     One training epoch with random starting points for every trajectory
+
     Args:
         model (torch.nn.Module): neural network PDE solver
-        unrolling (list): list of different unrolling steps for each batch entry
+        unrolling (list):
+            list of different unrolling steps for each batch entry
         batch_size (int): batch size
         optimizer (torch.optim): optimizer used for training
         loader (DataLoader): training dataloader
@@ -33,13 +35,17 @@ def training_loop(model: torch.nn.Module,
         optimizer.zero_grad()
         # Randomly choose number of unrollings
         unrolled_graphs = random.choice(unrolling)
-        steps = [t for t in range(graph_creator.tw,
-                                  graph_creator.t_res - graph_creator.tw - (graph_creator.tw * unrolled_graphs) + 1)]
+        steps = [
+            t for t in range(
+                graph_creator.tw,
+                graph_creator.t_res - graph_creator.tw
+                - (graph_creator.tw * unrolled_graphs) + 1)]
         # Randomly choose starting (time) point at the PDE solution manifold
         random_steps = random.choices(steps, k=batch_size)
         data, labels = graph_creator.create_data(u_super, random_steps)
         if f'{model}' == 'GNN':
-            graph = graph_creator.create_graph(data, labels, x, variables, random_steps).to(device)
+            graph = graph_creator.create_graph(
+                data, labels, x, variables, random_steps).to(device)
         else:
             data, labels = data.to(device), labels.to(device)
 
@@ -51,7 +57,8 @@ def training_loop(model: torch.nn.Module,
                 _, labels = graph_creator.create_data(u_super, random_steps)
                 if f'{model}' == 'GNN':
                     pred = model(graph)
-                    graph = graph_creator.create_next_graph(graph, pred, labels, random_steps).to(device)
+                    graph = graph_creator.create_next_graph(
+                        graph, pred, labels, random_steps).to(device)
                 else:
                     data = model(data)
                     labels = labels.to(device)
@@ -71,15 +78,19 @@ def training_loop(model: torch.nn.Module,
     losses = torch.stack(losses)
     return losses
 
-def test_timestep_losses(model: torch.nn.Module,
-                         steps: list,
-                         batch_size: int,
-                         loader: DataLoader,
-                         graph_creator: GraphCreator,
-                         criterion: torch.nn.modules.loss,
-                         device: torch.cuda.device = "cpu") -> None:
+
+def test_timestep_losses(
+        model: torch.nn.Module,
+        steps: list,
+        batch_size: int,
+        loader: DataLoader,
+        graph_creator: GraphCreator,
+        criterion: torch.nn.modules.loss,
+        device: torch.cuda.device = "cpu") -> None:
     """
-    Loss for one neural network forward pass at certain timepoints on the validation/test datasets
+    Loss for one neural network forward pass at certain timepoints on the
+    validation/test datasets
+
     Args:
         model (torch.nn.Module): neural network PDE solver
         steps (list): input list of possible starting (time) points
@@ -103,7 +114,8 @@ def test_timestep_losses(model: torch.nn.Module,
                 same_steps = [step]*batch_size
                 data, labels = graph_creator.create_data(u_super, same_steps)
                 if f'{model}' == 'GNN':
-                    graph = graph_creator.create_graph(data, labels, x, variables, same_steps).to(device)
+                    graph = graph_creator.create_graph(
+                        data, labels, x, variables, same_steps).to(device)
                     pred = model(graph)
                     loss = criterion(pred, graph.y)
                 else:
@@ -116,16 +128,16 @@ def test_timestep_losses(model: torch.nn.Module,
         print(f'Step {step}, mean loss {torch.mean(losses)}')
 
 
-
-def test_unrolled_losses(model: torch.nn.Module,
-                         steps: list,
-                         batch_size: int,
-                         nr_gt_steps: int,
-                         nx_base_resolution: int,
-                         loader: DataLoader,
-                         graph_creator: GraphCreator,
-                         criterion: torch.nn.modules.loss,
-                         device: torch.cuda.device = "cpu") -> torch.Tensor:
+def test_unrolled_losses(
+        model: torch.nn.Module,
+        steps: list,
+        batch_size: int,
+        nr_gt_steps: int,
+        nx_base_resolution: int,
+        loader: DataLoader,
+        graph_creator: GraphCreator,
+        criterion: torch.nn.modules.loss,
+        device: torch.cuda.device = "cpu") -> torch.Tensor:
     """
     Loss for full trajectory unrolling, we report this loss in the paper
     Args:
@@ -149,7 +161,8 @@ def test_unrolled_losses(model: torch.nn.Module,
             same_steps = [graph_creator.tw * nr_gt_steps] * batch_size
             data, labels = graph_creator.create_data(u_super, same_steps)
             if f'{model}' == 'GNN':
-                graph = graph_creator.create_graph(data, labels, x, variables, same_steps).to(device)
+                graph = graph_creator.create_graph(
+                    data, labels, x, variables, same_steps).to(device)
                 pred = model(graph)
                 loss = criterion(pred, graph.y) / nx_base_resolution
             else:
@@ -159,12 +172,17 @@ def test_unrolled_losses(model: torch.nn.Module,
 
             losses_tmp.append(loss / batch_size)
 
-            # Unroll trajectory and add losses which are obtained for each unrolling
-            for step in range(graph_creator.tw * (nr_gt_steps + 1), graph_creator.t_res - graph_creator.tw + 1, graph_creator.tw):
+            # Unroll trajectory and add losses which are obtained for each
+            # unrolling
+            for step in range(
+                    graph_creator.tw * (nr_gt_steps + 1),
+                    graph_creator.t_res - graph_creator.tw + 1,
+                    graph_creator.tw):
                 same_steps = [step] * batch_size
                 _, labels = graph_creator.create_data(u_super, same_steps)
                 if f'{model}' == 'GNN':
-                    graph = graph_creator.create_next_graph(graph, pred, labels, same_steps).to(device)
+                    graph = graph_creator.create_next_graph(
+                        graph, pred, labels, same_steps).to(device)
                     pred = model(graph)
                     loss = criterion(pred, graph.y) / nx_base_resolution
                 else:
@@ -174,12 +192,17 @@ def test_unrolled_losses(model: torch.nn.Module,
                 losses_tmp.append(loss / batch_size)
 
             # Losses for numerical baseline
-            for step in range(graph_creator.tw * nr_gt_steps, graph_creator.t_res - graph_creator.tw + 1,
-                              graph_creator.tw):
+            for step in range(
+                    graph_creator.tw * nr_gt_steps,
+                    graph_creator.t_res - graph_creator.tw + 1,
+                    graph_creator.tw):
                 same_steps = [step] * batch_size
-                _, labels_super = graph_creator.create_data(u_super, same_steps)
-                _, labels_base = graph_creator.create_data(u_base, same_steps)
-                loss_base = criterion(labels_super, labels_base) / nx_base_resolution
+                _, labels_super = graph_creator.create_data(
+                    u_super, same_steps)
+                _, labels_base = graph_creator.create_data(
+                    u_base, same_steps)
+                loss_base = criterion(
+                    labels_super, labels_base) / nx_base_resolution
                 losses_base_tmp.append(loss_base / batch_size)
 
         losses.append(torch.sum(torch.stack(losses_tmp)))
@@ -191,7 +214,3 @@ def test_unrolled_losses(model: torch.nn.Module,
     print(f'Unrolled forward base losses {torch.mean(losses_base)}')
 
     return losses
-
-
-
-
