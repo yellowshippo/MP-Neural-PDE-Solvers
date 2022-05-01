@@ -40,6 +40,7 @@ def training_loop(
                 graph_creator.tw,
                 graph_creator.t_res - graph_creator.tw
                 - (graph_creator.tw * unrolled_graphs) + 1)]
+        # print(steps, unrolling)
         # Randomly choose starting (time) point at the PDE solution manifold
         random_steps = random.choices(steps, k=batch_size)
         data, labels = graph_creator.create_data(u_super, random_steps)
@@ -57,7 +58,7 @@ def training_loop(
                     graph, pred, labels, random_steps).to(device)
 
         pred = model(graph)
-        loss = criterion(pred, graph.y)
+        loss = criterion(torch.reshape(pred, graph.y.shape), graph.y)
 
         loss = torch.sqrt(loss)
         loss.backward()

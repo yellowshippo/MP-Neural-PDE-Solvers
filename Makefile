@@ -41,7 +41,7 @@ poetry:
 
 run: install
 	$(PYTHON) experiments/flearn.py --device=cpu --experiment=fluid \
-		--neighbors=6 --time_window=5 --log=True
+		--log=False --neighbors=6
 
 we3: install
 	$(PYTHON) experiments/train.py --device=cpu --experiment=WE3 \

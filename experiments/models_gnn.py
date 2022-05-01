@@ -244,5 +244,11 @@ class MP_PDE_Solver(torch.nn.Module):
         # -> [batch*n_nodes, time_window]
         diff = self.output_mlp(h[:, None]).squeeze(1)
         out = u[:, -1].repeat(self.time_window, 1).transpose(0, 1) + dt * diff
+        # raise ValueError(
+        #     h.shape, u.shape, diff.shape, out.shape, pos_x.shape,
+        #     u[:, -1].shape,
+        #     u[:, -1].repeat(self.time_window, 1).shape,
+        #     u[:, -1].repeat(self.time_window, 1).transpose(0, 1).shape,
+        # )
 
         return out

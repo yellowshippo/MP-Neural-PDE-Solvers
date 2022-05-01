@@ -199,6 +199,7 @@ def main(args: argparse):
             time_window=graph_creator.tw,
             eq_variables={
                 'tmax': graph_creator.tmax,
+                'dt': graph_creator.dt,
             }
         ).to(device)
     else:
@@ -273,10 +274,10 @@ if __name__ == "__main__":
 
     parser.add_argument(
         '--neighbors', type=int,
-        default=3, help="Neighbors to be considered in GNN solver")
+        default=6, help="Neighbors to be considered in GNN solver")
     parser.add_argument(
         '--time_window', type=int,
-        default=5, help="Time steps to be considered in GNN solver")
+        default=10, help="Time steps to be considered in GNN solver")
     parser.add_argument(
         '--unrolling', type=int,
         default=1, help="Unrolling which proceeds with each epoch")

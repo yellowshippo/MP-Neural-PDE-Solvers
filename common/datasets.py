@@ -12,7 +12,7 @@ from torch_cluster import radius_graph, knn_graph
 
 NS_STEP = 40
 NS_DT = .1
-T_RESOLUTION = 10
+T_RESOLUTION = 20
 
 
 class NpyDataset(Dataset):

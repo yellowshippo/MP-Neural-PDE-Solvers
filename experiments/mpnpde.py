@@ -5,6 +5,7 @@ from torch_geometric.nn import MessagePassing, InstanceNorm
 
 
 LEN_U_NS = 4  # (u, p)
+N_PARAM_NS = 14
 DIM = 3
 
 
@@ -30,7 +31,8 @@ class GNN_Layer(MessagePassing):
         out_features: int,
         hidden_features: int,
         time_window: int,
-        n_variables: int
+        n_variables: int,
+        pde: str,
     ):
         """
         Initialize message passing layers
@@ -48,19 +50,27 @@ class GNN_Layer(MessagePassing):
         self.out_features = out_features
         self.hidden_features = hidden_features
 
+        self.pde = pde
+        if self.pde == 'ns':
+            len_u = LEN_U_NS
+        else:
+            raise ValueError(f"Invalid PDE type: {self.pde}")
+
         self.message_net_1 = nn.Sequential(
             nn.Linear(
-                2 * in_features + time_window + DIM + 1 + n_variables,
+                2 * in_features + time_window * len_u + DIM + n_variables,
                 hidden_features),
             Swish()
         )
+        # raise ValueError(self.message_net_1[0])
+
         self.message_net_2 = nn.Sequential(
             nn.Linear(hidden_features, hidden_features),
             Swish()
         )
         self.update_net_1 = nn.Sequential(
             nn.Linear(
-                in_features + hidden_features, hidden_features),
+                in_features + hidden_features + n_variables, hidden_features),
             Swish()
         )
         self.update_net_2 = nn.Sequential(
@@ -81,9 +91,17 @@ class GNN_Layer(MessagePassing):
         """
         Message update following formula 8 of the paper
         """
-        message = self.message_net_1(
-            torch.cat(
-                (x_i, x_j, u_i - u_j, pos_i - pos_j, variables_i), dim=-1))
+        try:
+            message = self.message_net_1(
+                torch.cat(
+                    (x_i, x_j, u_i - u_j, pos_i - pos_j, variables_i), dim=-1))
+        except Exception:
+            raise ValueError(
+                x_i.shape, x_j.shape, u_i.shape, pos_i.shape,
+                variables_i.shape,
+                x_i.shape[-1] + x_j.shape[-1] + u_i.shape[-1]
+                + pos_i.shape[-1] + variables_i.shape[-1],
+                self.message_net_1[0])
         message = self.message_net_2(message)
         return message
 
@@ -92,9 +110,10 @@ class GNN_Layer(MessagePassing):
         Node update following formula 9 of the paper
         """
         try:
-            update = self.update_net_1(torch.cat((x, message, variables), dim=-1))
+            update = self.update_net_1(
+                torch.cat((x, message, variables), dim=-1))
             update = self.update_net_2(update)
-        except:
+        except Exception:
             raise ValueError(x.shape, message.shape, variables.shape)
         if self.in_features == self.out_features:
             return x + update
@@ -139,8 +158,8 @@ class MP_PDE_Solver(torch.nn.Module):
         self.eq_variables = eq_variables
 
         if self.pde == 'ns':
-            n_u = LEN_U_NS
-            n_parameter_feature = 14
+            self.n_u = LEN_U_NS
+            self.n_parameter_feature = N_PARAM_NS
         else:
             raise ValueError(f"Invalid PDE type: {self.pde}")
 
@@ -149,8 +168,9 @@ class MP_PDE_Solver(torch.nn.Module):
             hidden_features=self.hidden_features,
             out_features=self.hidden_features,
             time_window=self.time_window,
-            n_variables=n_parameter_feature + 1
+            n_variables=self.n_parameter_feature + 1,
             # ^^ variables = eq_variables + time
+            pde=self.pde,
         ) for _ in range(self.hidden_layer - 1)))
 
         # The last message passing last layer has a fixed output size to make
@@ -161,14 +181,16 @@ class MP_PDE_Solver(torch.nn.Module):
                 hidden_features=self.hidden_features,
                 out_features=self.hidden_features,
                 time_window=self.time_window,
-                n_variables=len(self.eq_variables) + 1
+                n_variables=self.n_parameter_feature + 1,
+                pde=self.pde,
             )
         )
 
         self.embedding_mlp = nn.Sequential(
             nn.Linear(
-                self.time_window * n_u + DIM + 1 + n_parameter_feature,
-                self.hidden_features),  # + 1 being time
+                self.time_window * self.n_u + DIM + 1  # + 1 being time
+                + self.n_parameter_feature,
+                self.hidden_features),
             Swish(),
             nn.Linear(self.hidden_features, self.hidden_features),
             Swish()
@@ -193,9 +215,15 @@ class MP_PDE_Solver(torch.nn.Module):
                 Swish(),
                 nn.Conv1d(8, 1, 10, stride=1)
             )
+        elif (self.time_window == 10):
+            # TODO: Investigate how to set 1D conv parameter shape
+            self.output_mlp = nn.Sequential(
+                nn.Conv1d(1, 8, 16, stride=6),
+                Swish(),
+                nn.Conv1d(8, self.n_u, 10, stride=1)
+            )
         else:
-            pass
-            # raise ValueError(f"Invalid time_window: {self.time_window}")
+            raise ValueError(f"Invalid time_window: {self.time_window}")
         return
 
     def __repr__(self):
@@ -232,12 +260,19 @@ class MP_PDE_Solver(torch.nn.Module):
             h = self.gnn_layers[i](h, u, pos_x, variables, edge_index, batch)
 
         # Decoder (formula 10 in the paper)
-        dt = (torch.ones(1, self.time_window) * self.pde.dt).to(h.device)
+        dt = (torch.ones(1, self.time_window) * self.eq_variables['dt']).to(
+            h.device)
         dt = torch.cumsum(dt, dim=1)
+        dt = torch.cat([
+            torch.cat([dt[:, [i_t]]] * self.n_u, -1)
+            for i_t in range(dt.shape[-1])], -1)
         # [batch*n_nodes, hidden_dim]
         # -> 1DCNN([batch*n_nodes, 1, hidden_dim])
-        # -> [batch*n_nodes, time_window]
-        diff = self.output_mlp(h[:, None]).squeeze(1)
-        out = u[:, -1].repeat(self.time_window, 1).transpose(0, 1) + dt * diff
+        # -> [batch*n_nodes, time_window * n_u]
+        diff = torch.reshape(self.output_mlp(h[:, None]), (len(pos_x), -1))
+        repeated_u = torch.cat([
+            u[:, -i].repeat(self.time_window, 1).transpose(0, 1)
+            for i in range(self.n_u)], -1)
+        out = repeated_u + dt * diff
 
         return out
