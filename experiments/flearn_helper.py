@@ -1,7 +1,14 @@
+import pathlib
+from typing import Tuple
+
+import numpy as np
 import torch
 import random
 from torch.utils.data import DataLoader
 from common.utils import GraphCreator
+
+
+DEBUG = False
 
 
 def training_loop(
@@ -58,6 +65,11 @@ def training_loop(
 
         pred = model(graph)
         loss = criterion(torch.reshape(pred, graph.y.shape), graph.y)
+        if DEBUG:
+            save_ns(pred.detach().numpy(), pathlib.Path('tmp/pred'))
+            save_ns(
+                pred.reshape(pred.shape).detach().numpy(),
+                pathlib.Path('tmp/ans'))
 
         loss = torch.sqrt(loss)
         loss.backward()
@@ -120,7 +132,7 @@ def test_unrolled_losses(
         loader: DataLoader,
         graph_creator: GraphCreator,
         criterion: torch.nn.modules.loss,
-        device: torch.cuda.device = "cpu") -> torch.Tensor:
+        device: torch.cuda.device = "cpu") -> Tuple[torch.Tensor, dict]:
     """
     Loss for full trajectory unrolling, we report this loss in the paper
     Args:
@@ -135,8 +147,12 @@ def test_unrolled_losses(
         torch.Tensor: valid/test losses
     """
     losses = []
-    for (u_base, u_super, x, variables) in loader:
+    predictions = {}
+    for i_data, loaded_data in enumerate(loader):
+        u_base, u_super, x, variables = loaded_data
+        data_directory = loader.dataset.data_directories[i_data]
         losses_tmp = []
+        predictions_tmp = []
         with torch.no_grad():
             same_steps = [graph_creator.tw * nr_gt_steps] * batch_size
             data, labels = graph_creator.create_data(u_super, same_steps)
@@ -153,6 +169,8 @@ def test_unrolled_losses(
                     graph_creator.tw * (nr_gt_steps + 1),
                     graph_creator.t_res - graph_creator.tw + 1,
                     graph_creator.tw):
+                # TODO: Investigate appropreate nr_gt_steps value
+                print(f"Test step: {step}")
                 same_steps = [step] * batch_size
                 _, labels = graph_creator.create_data(u_super, same_steps)
                 graph = graph_creator.create_next_graph(
@@ -161,10 +179,47 @@ def test_unrolled_losses(
                 loss = criterion(
                     torch.reshape(pred, graph.y.shape), graph.y)
                 losses_tmp.append(loss / batch_size)
+                predictions_tmp.append(pred)
 
+        predictions.update({
+            data_directory:
+            torch.cat(predictions_tmp, -1).detach().numpy()})
         losses.append(torch.sum(torch.stack(losses_tmp)))
 
     losses = torch.stack(losses)
     print(f'Unrolled forward losses {torch.mean(losses)}')
 
-    return losses
+    return losses, predictions
+
+
+def save_prediction(
+        pde: str,
+        dict_prediction: dict,
+        save_directory: pathlib.Path) -> None:
+    for data_directory, prediction in dict_prediction.items():
+        sample_save_directory = save_directory \
+            / data_directory.parent.parent.parent.name \
+            / data_directory.parent.parent.name \
+            / data_directory.parent.name / data_directory.name
+        sample_save_directory.mkdir(parents=True, exist_ok=True)
+        if pde == 'ns':
+            save_ns(prediction, sample_save_directory)
+        else:
+            raise ValueError(f"Invalid PDE type: {pde}")
+    return
+
+
+def save_ns(
+        prediction_data: np.ndarray,
+        save_directory: pathlib.Path) -> None:
+    if prediction_data.shape[-1] % 4 != 0:
+        raise ValueError(
+            f"Invalid prediction_data shape for NS: {prediction_data.shape}")
+    n_step = prediction_data.shape[-1] // 4
+    for i_step in range(n_step):
+        u = prediction_data[:, 4*i_step:4*i_step+3]
+        p = prediction_data[:, [4*i_step+3]]
+        np.save(save_directory / f"nodal_U_step{i_step}.npy", u)
+        np.save(save_directory / f"nodal_p_step{i_step}.npy", p)
+    print(f"Predicted data saved in: {save_directory}")
+    return

@@ -18,7 +18,7 @@ install:
 
 ## Install PyTorch geometric with CPU
 install_geo_cpu: poetry
-	$(PYTHON) -m pip install torch==1.9.1 torchvision==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html \
+	$(PYTHON) -m pip install torch==1.9.1 torchvision==0.10.1 --extra-index-url https://download.pytorch.org/whl/cpu \
 		&& $(PYTHON) -m pip install -U torch-scatter torch-sparse==0.6.12 torch-cluster torch-spline-conv torch-geometric \
 		-f https://data.pyg.org/whl/torch-1.9.1+cpu.html
 

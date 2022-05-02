@@ -7,13 +7,17 @@ from torch.utils.data import Dataset
 from torch import nn
 from typing import Tuple
 from torch_geometric.data import Data
-from torch_cluster import radius_graph, knn_graph
+from torch_cluster import radius_graph
+
+import experiments.flearn_helper as helper
 
 
 NS_STEP = 40
 NS_DT = .1
 NS_DX = (0.3337 + 0.8592) / 45
 T_RESOLUTION = NS_STEP
+
+DEBUG = False
 
 
 class NpyDataset(Dataset):
@@ -171,6 +175,11 @@ class GraphCreator(nn.Module):
             label = dp[step:self.tw + step]
             data = torch.cat((data, d[None, :]), 0)
             labels = torch.cat((labels, label[None, :]), 0)
+        if DEBUG:
+            print('At data creation')
+            print(data[0, 1, 100:110, :])
+            helper.save_ns(data[0, 0].numpy(), pathlib.Path('tmp/pred'))
+            helper.save_ns(labels[0, 0].numpy(), pathlib.Path('tmp/ans'))
 
         return data, labels
 
@@ -230,7 +239,7 @@ class GraphCreator(nn.Module):
         if self.pde == 'ns':
             graph.parameters = torch.cat([
                 v for k, v in variables.items()
-                if k not in ['adj']], -1)
+                if k not in ['adj', 'data_directory']], -1)
 
         else:
             raise ValueError(f"Invalid PDE type: {self.pde}")

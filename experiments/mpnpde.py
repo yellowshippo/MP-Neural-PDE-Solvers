@@ -1,12 +1,18 @@
+import pathlib
+
 import torch
 from torch import nn
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, InstanceNorm
 
+import experiments.flearn_helper as helper
+
 
 LEN_U_NS = 4  # (u, p)
 N_PARAM_NS = 14
 DIM = 3
+
+DEBUG = False
 
 
 class Swish(nn.Module):
@@ -239,7 +245,10 @@ class MP_PDE_Solver(torch.nn.Module):
         Returns:
             torch.Tensor: data output
         """
+        # u = torch.cat([data.x[:, i] for i in range(data.x.shape[1])], -1)
         u = torch.reshape(data.x, (data.x.shape[0], -1))
+        # if DEBUG:
+        #     helper.save_ns(u.detach().numpy(), pathlib.Path('tmp'))
         # Encode and normalize coordinate information
         pos = data.pos
         pos_x = pos[:, 1:]
@@ -270,9 +279,18 @@ class MP_PDE_Solver(torch.nn.Module):
         # -> 1DCNN([batch*n_nodes, 1, hidden_dim])
         # -> [batch*n_nodes, time_window * n_u]
         diff = torch.reshape(self.output_mlp(h[:, None]), (len(pos_x), -1))
-        repeated_u = torch.cat([
-            u[:, -i].repeat(self.time_window, 1).transpose(0, 1)
-            for i in range(self.n_u)], -1)
+
+        # TODO: Investigate why it was u[:, -i] not u[:, i]
+        # repeated_u = torch.cat([
+        #     u[:, -self.n_u + i].repeat(self.time_window, 1).transpose(0, 1)
+        #     for i in range(self.n_u)], -1)
+        repeated_u = torch.cat(
+            [u[:, :self.n_u]] * (u.shape[-1] // self.n_u), -1)
         out = repeated_u + dt * diff
+        if DEBUG:
+            print('At forward')
+            print(u[100:110, 4:8])
+            helper.save_ns(out.detach().numpy(), pathlib.Path('tmp'))
+            helper.save_ns(diff.detach().numpy(), pathlib.Path('tmp/diff'))
 
         return out

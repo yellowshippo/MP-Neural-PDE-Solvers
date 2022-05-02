@@ -2,6 +2,7 @@ import argparse
 import os
 import pathlib
 import sys
+from typing import Tuple
 from datetime import datetime
 
 import numpy as np
@@ -12,7 +13,8 @@ from torch.utils.data import DataLoader
 import common.datasets as datasets
 from experiments.mpnpde import MP_PDE_Solver
 from experiments.flearn_helper \
-    import training_loop, test_timestep_losses, test_unrolled_losses
+    import training_loop, test_timestep_losses, test_unrolled_losses, \
+    save_prediction
 
 
 def check_directory() -> None:
@@ -84,7 +86,7 @@ def test(args: argparse,
          loader: DataLoader,
          graph_creator: datasets.GraphCreator,
          criterion: torch.nn.modules.loss,
-         device: torch.cuda.device = "cpu") -> torch.Tensor:
+         device: torch.cuda.device = "cpu") -> Tuple[torch.Tensor, dict]:
     """
     Test routine
     Both step wise and unrolled forward losses are computed
@@ -109,6 +111,7 @@ def test(args: argparse,
     steps = [
         t for t in range(
             graph_creator.tw, graph_creator.t_res-graph_creator.tw + 1)]
+    raise ValueError(steps)
     losses = test_timestep_losses(
         model=model,
         steps=steps,
@@ -119,7 +122,7 @@ def test(args: argparse,
         device=device)
 
     # next we test the unrolled losses
-    losses = test_unrolled_losses(
+    losses, predictions = test_unrolled_losses(
         model=model,
         steps=steps,
         batch_size=args.batch_size,
@@ -129,7 +132,7 @@ def test(args: argparse,
         criterion=criterion,
         device=device)
 
-    return torch.mean(losses)
+    return torch.mean(losses), predictions
 
 
 def main(args: argparse):
@@ -172,7 +175,8 @@ def main(args: argparse):
 
     dateTimeObj = datetime.now()
     timestring = f"{dateTimeObj.date().month}{dateTimeObj.date().day}" \
-        + f"{dateTimeObj.time().hour}{dateTimeObj.time().minute}"
+        + f"{dateTimeObj.time().hour}{dateTimeObj.time().minute}" \
+        + f"{dateTimeObj.time().second}"
 
     if (args.log):
         logfile = f"experiments/log/{args.model}_{pde}_{args.experiment}" \
@@ -181,9 +185,12 @@ def main(args: argparse):
         print(f'Writing to log file {logfile}')
         sys.stdout = open(logfile, 'w')
 
-    save_path = f"models/GNN_{pde}_{args.experiment}_" \
-        + f"n{args.neighbors}_" \
-        + f"tw{args.time_window}_unrolling{args.unrolling}_time{timestring}.pt"
+    save_directory = pathlib.Path(
+        f"models/GNN_{pde}_{args.experiment}_"
+        + f"n{args.neighbors}_"
+        + f"tw{args.time_window}_unrolling{args.unrolling}_time{timestring}")
+    save_directory.mkdir(parents=True)
+    save_path = save_directory / 'model.pt'
     print(f'Training on dataset {train_string}')
     print(device)
     print(save_path)
@@ -224,17 +231,24 @@ def main(args: argparse):
             args, pde, epoch, model, optimizer, train_loader, graph_creator,
             criterion, device=device)
         print("Evaluation on validation dataset:")
-        val_loss = test(
+        val_loss, _ = test(
             args, pde, model, valid_loader, graph_creator, criterion,
             device=device)
         if (val_loss < min_val_loss):
             print("Evaluation on test dataset:")
-            test_loss = test(
+            test_loss, test_prediction = test(
                 args, pde, model, test_loader, graph_creator, criterion,
                 device=device)
+
             # Save model
             torch.save(model.state_dict(), save_path)
-            print(f"Saved model at {save_path}\n")
+            print(f"Saved model at {save_path}")
+
+            # Save prediction
+            save_prediction(pde, test_prediction, save_directory)
+
+            print('--')
+
             min_val_loss = val_loss
 
         scheduler.step()
@@ -266,7 +280,7 @@ if __name__ == "__main__":
         '--num_epochs', type=int, default=20,
         help='Number of training epochs')
     parser.add_argument(
-        '--lr', type=float, default=1e-3,
+        '--lr', type=float, default=1e-4,
         help='Learning rate')
     parser.add_argument(
         '--lr_decay', type=float,
@@ -274,7 +288,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         '--neighbors', type=int,
-        default=6, help="Neighbors to be considered in GNN solver")
+        default=8, help="Neighbors to be considered in GNN solver")
     parser.add_argument(
         '--time_window', type=int,
         default=10, help="Time steps to be considered in GNN solver")
@@ -284,7 +298,6 @@ if __name__ == "__main__":
     parser.add_argument(
         '--nr_gt_steps', type=int,
         default=1, help="Number of steps done by numerical solver")
-    # The MPN-PDE solver?
 
     # Misc
     parser.add_argument(
