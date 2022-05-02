@@ -91,17 +91,9 @@ class GNN_Layer(MessagePassing):
         """
         Message update following formula 8 of the paper
         """
-        try:
-            message = self.message_net_1(
-                torch.cat(
-                    (x_i, x_j, u_i - u_j, pos_i - pos_j, variables_i), dim=-1))
-        except Exception:
-            raise ValueError(
-                x_i.shape, x_j.shape, u_i.shape, pos_i.shape,
-                variables_i.shape,
-                x_i.shape[-1] + x_j.shape[-1] + u_i.shape[-1]
-                + pos_i.shape[-1] + variables_i.shape[-1],
-                self.message_net_1[0])
+        message = self.message_net_1(
+            torch.cat(
+                (x_i, x_j, u_i - u_j, pos_i - pos_j, variables_i), dim=-1))
         message = self.message_net_2(message)
         return message
 
@@ -109,12 +101,9 @@ class GNN_Layer(MessagePassing):
         """
         Node update following formula 9 of the paper
         """
-        try:
-            update = self.update_net_1(
-                torch.cat((x, message, variables), dim=-1))
-            update = self.update_net_2(update)
-        except Exception:
-            raise ValueError(x.shape, message.shape, variables.shape)
+        update = self.update_net_1(
+            torch.cat((x, message, variables), dim=-1))
+        update = self.update_net_2(update)
         if self.in_features == self.out_features:
             return x + update
         else:
@@ -129,7 +118,7 @@ class MP_PDE_Solver(torch.nn.Module):
         self,
         pde: str,
         time_window: int = 25,
-        hidden_features: int = 128,
+        hidden_features: int = 20,
         hidden_layer: int = 6,
         eq_variables: dict = {}
     ):
@@ -217,11 +206,22 @@ class MP_PDE_Solver(torch.nn.Module):
             )
         elif (self.time_window == 10):
             # TODO: Investigate how to set 1D conv parameter shape
-            self.output_mlp = nn.Sequential(
-                nn.Conv1d(1, 8, 16, stride=6),
-                Swish(),
-                nn.Conv1d(8, self.n_u, 10, stride=1)
-            )
+            if self.hidden_features == 128:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 16, stride=6),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                )
+
+            elif self.hidden_features == 20:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 1, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 1, stride=2)
+                )
+            else:
+                raise ValueError(
+                    f"Invalid hidden_features: {self.hidden_features}")
         else:
             raise ValueError(f"Invalid time_window: {self.time_window}")
         return

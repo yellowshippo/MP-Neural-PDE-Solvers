@@ -18,31 +18,36 @@ install:
 
 ## Install PyTorch geometric with CPU
 install_geo_cpu: poetry
-	$(PYTHON) -m pip install torch==1.11.0 torchvision==0.2.2 -f https://download.pytorch.org/whl/torch_stable.html \
-  && $(PYTHON) -m pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html \
-  && $(PYTHON) -m pip install torch-sparse -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html \
-  && $(PYTHON) -m pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html \
-  && $(PYTHON) -m pip install torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.9.0+cpu.html \
-  && $(PYTHON) -m pip install torch-geometric
+	$(PYTHON) -m pip install torch==1.9.1 torchvision==0.10.1 -f https://download.pytorch.org/whl/torch_stable.html \
+		&& $(PYTHON) -m pip install -U torch-scatter torch-sparse==0.6.12 torch-cluster torch-spline-conv torch-geometric \
+		-f https://data.pyg.org/whl/torch-1.9.1+cpu.html
 
 ## Install PyTorch geometric with GPU
 install_geo_gpu: poetry
-	$(PYTHON) -m pip install torch==1.9.0+$(CUDA) torchvision==0.7.0+$(CUDA) -f https://download.pytorch.org/whl/torch_stable.html \
-  && $(PYTHON) -m pip install llvmlite==0.35.0 \
-  && $(PYTHON) -m pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.9.0+$(CUDA).html \
-  && $(PYTHON) -m pip install torch-sparse -f https://pytorch-geometric.com/whl/torch-1.9.0+$(CUDA).html \
-  && $(PYTHON) -m pip install torch-cluster -f https://pytorch-geometric.com/whl/torch-1.9.0+$(CUDA).html \
-  && $(PYTHON) -m pip install torch-spline-conv -f https://pytorch-geometric.com/whl/torch-1.9.0+$(CUDA).html \
-  && $(PYTHON) -m pip install torch-geometric
+	$(PYTHON) -m pip install torch==1.9.1+$(strip $(CUDA)) torchvision==0.10.1+$(strip $(CUDA)) --extra-index-url https://download.pytorch.org/whl/cu111 \
+		&& $(PYTHON) -m pip install -U torch-scatter torch-sparse==0.6.12 torch-cluster torch-spline-conv torch-geometric \
+		-f https://data.pyg.org/whl/torch-1.9.1+$(strip $(CUDA)).html
 
 poetry:
 	$(PIP) install pip --upgrade
 	poetry config virtualenvs.in-project true
 
-run: install
+test: install
+	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
+		--log=False --neighbors=1
+
+test_cpu: install
 	$(PYTHON) experiments/flearn.py --device=cpu --experiment=fluid \
-		--log=False --neighbors=6
+		--log=False --neighbors=1
+
+flearn: install
+	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
+		--log=False --neighbors=16
+
+we3_cpu: install
+	$(PYTHON) experiments/train.py --device=cpu --experiment=WE3 \
+		--base_resolution=250,40 --neighbors=1 --time_window=25
 
 we3: install
-	$(PYTHON) experiments/train.py --device=cpu --experiment=WE3 \
-		--base_resolution=250,40 --neighbors=6 --time_window=25 --log=True
+	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=WE3 \
+		--base_resolution=250,40 --neighbors=1 --time_window=25

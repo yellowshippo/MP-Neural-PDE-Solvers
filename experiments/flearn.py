@@ -139,9 +139,9 @@ def main(args: argparse):
 
     if args.experiment == 'fluid':
         pde = 'ns'
-        train_string = pathlib.Path('data/flearn/comp/preprocessed/lint_a')
-        valid_string = pathlib.Path('data/flearn/comp/preprocessed/lint_a')
-        test_string = pathlib.Path('data/flearn/comp/preprocessed/lint_a')
+        train_string = pathlib.Path('data/flearn/comp/preprocessed/train')
+        valid_string = pathlib.Path('data/flearn/comp/preprocessed/validation')
+        test_string = pathlib.Path('data/flearn/comp/preprocessed/validation')
     else:
         raise Exception("Wrong experiment")
 
@@ -266,7 +266,7 @@ if __name__ == "__main__":
         '--num_epochs', type=int, default=20,
         help='Number of training epochs')
     parser.add_argument(
-        '--lr', type=float, default=1e-4,
+        '--lr', type=float, default=1e-3,
         help='Learning rate')
     parser.add_argument(
         '--lr_decay', type=float,
@@ -283,7 +283,8 @@ if __name__ == "__main__":
         default=1, help="Unrolling which proceeds with each epoch")
     parser.add_argument(
         '--nr_gt_steps', type=int,
-        default=2, help="Number of steps done by numerical solver")
+        default=1, help="Number of steps done by numerical solver")
+    # The MPN-PDE solver?
 
     # Misc
     parser.add_argument(

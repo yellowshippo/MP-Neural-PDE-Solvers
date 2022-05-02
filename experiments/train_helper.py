@@ -40,8 +40,10 @@ def training_loop(
                 graph_creator.tw,
                 graph_creator.t_res - graph_creator.tw
                 - (graph_creator.tw * unrolled_graphs) + 1)]
+        print(f"steps: {steps}, unrolling: {unrolling}")
         # Randomly choose starting (time) point at the PDE solution manifold
         random_steps = random.choices(steps, k=batch_size)
+        print(f"random_steps: {random_steps}")
         data, labels = graph_creator.create_data(u_super, random_steps)
         if f'{model}' == 'GNN':
             graph = graph_creator.create_graph(
@@ -53,7 +55,9 @@ def training_loop(
         # This is the pushforward trick!!!
         with torch.no_grad():
             for _ in range(unrolled_graphs):
+                # After Any(unrolling > 0), i.e., 1st epoch (starting from 0).
                 random_steps = [rs + graph_creator.tw for rs in random_steps]
+                print(f"random_steps: {random_steps}")
                 _, labels = graph_creator.create_data(u_super, random_steps)
                 if f'{model}' == 'GNN':
                     pred = model(graph)
