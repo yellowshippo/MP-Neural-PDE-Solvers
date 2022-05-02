@@ -28,7 +28,8 @@ class NpyDataset(Dataset):
             path: pathlib.Path,
             pde: str,
             mode: str,
-            load_all: bool = False) -> None:
+            load_all: bool = False,
+            time_window: int = 10) -> None:
         """Initialize the dataset object
         Args:
             path: path to dataset
@@ -37,6 +38,7 @@ class NpyDataset(Dataset):
             base_resolution: base resolution of the dataset [nt, nx]
             super_resolution: super resolution of the dataset [nt, nx]
             load_all: load all the data into memory
+            time_window: time window
         Returns:
             None
         """
@@ -44,11 +46,12 @@ class NpyDataset(Dataset):
         self.mode = mode
         self.pde = pde
         self.dtype = torch.float64
+        self.tw = time_window
         if self.pde == 'ns':
-            self.nt = NS_STEP
+            self.nt = NS_STEP + self.tw  # Take into account padding
             self.dt = NS_DT
             self.tmin = 0.
-            self.tmax = self.nt * self.dt
+            self.tmax = self.nt * self.dt  # Take into account padding
             self.required_file_name = 'nodal_U_step0.npy'
         self.data_directories = self._collect_directories(path)
         return
@@ -83,7 +86,8 @@ class NpyDataset(Dataset):
                                 ..., 0],
                             np.load(data_directory / f"nodal_p_step{i}.npy"),
                         ], axis=-1)
-                    for i in range(self.nt)],
+                    for i in [0] * (self.tw - 1) + list(range(self.nt))],
+                # Pad first step for temporal bundling
                 axis=0))
             u_super = u_base.clone()
 
@@ -141,12 +145,12 @@ class GraphCreator(nn.Module):
         self.n = neighbors
         self.tw = time_window
         if self.pde == 'ns':
-            self.nt = NS_STEP
+            self.nt = NS_STEP + self.tw  # Take into account padding
             self.dt = NS_DT
             self.dx = NS_DX
             self.tmin = 0.
             self.tmax = NS_STEP * NS_DT
-            self.t_res = T_RESOLUTION
+            self.t_res = T_RESOLUTION + self.tw
         else:
             raise ValueError(f"Invalid pde type: {self.pde}")
 
@@ -225,7 +229,7 @@ class GraphCreator(nn.Module):
             radius = (self.n + .01) * self.dx
             edge_index = radius_graph(
                 x_pos, r=radius, batch=batch.long(), loop=False)
-            # max_num_neighbors is 32 by default
+            # NOTE: max_num_neighbors is 32 by default
 
         else:
             raise ValueError(f"Invalid PDE type: {self.pde}")

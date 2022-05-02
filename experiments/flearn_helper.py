@@ -152,9 +152,12 @@ def test_unrolled_losses(
         u_base, u_super, x, variables = loaded_data
         data_directory = loader.dataset.data_directories[i_data]
         losses_tmp = []
+        ans_tmp = []
         predictions_tmp = []
         with torch.no_grad():
-            same_steps = [graph_creator.tw * nr_gt_steps] * batch_size
+            step = graph_creator.tw * nr_gt_steps
+            print(f"Test step: {step}")
+            same_steps = [step] * batch_size
             data, labels = graph_creator.create_data(u_super, same_steps)
             graph = graph_creator.create_graph(
                 data, labels, x, variables, same_steps).to(device)
@@ -162,9 +165,11 @@ def test_unrolled_losses(
             loss = criterion(torch.reshape(pred, graph.y.shape), graph.y)
 
             losses_tmp.append(loss / batch_size)
+            ans_tmp.append(graph.y.reshape(pred.shape))
+            predictions_tmp.append(pred)
 
             # Unroll trajectory and add losses which are obtained for each
-            # unrolling
+            # unrolling, using the previous prediction
             for step in range(
                     graph_creator.tw * (nr_gt_steps + 1),
                     graph_creator.t_res - graph_creator.tw + 1,
@@ -178,12 +183,19 @@ def test_unrolled_losses(
                 pred = model(graph)
                 loss = criterion(
                     torch.reshape(pred, graph.y.shape), graph.y)
+
                 losses_tmp.append(loss / batch_size)
+                ans_tmp.append(graph.y.reshape(pred.shape))
                 predictions_tmp.append(pred)
 
         predictions.update({
-            data_directory:
-            torch.cat(predictions_tmp, -1).detach().numpy()})
+            data_directory: {
+                'ans':
+                torch.cat(ans_tmp, -1).detach().numpy(),
+                'pred':
+                torch.cat(predictions_tmp, -1).detach().numpy(),
+            }
+        })
         losses.append(torch.sum(torch.stack(losses_tmp)))
 
     losses = torch.stack(losses)
@@ -196,30 +208,38 @@ def save_prediction(
         pde: str,
         dict_prediction: dict,
         save_directory: pathlib.Path) -> None:
-    for data_directory, prediction in dict_prediction.items():
+    for data_directory, dict_data in dict_prediction.items():
         sample_save_directory = save_directory \
             / data_directory.parent.parent.parent.name \
             / data_directory.parent.parent.name \
             / data_directory.parent.name / data_directory.name
         sample_save_directory.mkdir(parents=True, exist_ok=True)
         if pde == 'ns':
-            save_ns(prediction, sample_save_directory)
+            save_ns(dict_data, sample_save_directory)
         else:
             raise ValueError(f"Invalid PDE type: {pde}")
     return
 
 
 def save_ns(
-        prediction_data: np.ndarray,
+        dict_data: dict,
         save_directory: pathlib.Path) -> None:
+    prediction_data = dict_data['pred']
     if prediction_data.shape[-1] % 4 != 0:
         raise ValueError(
             f"Invalid prediction_data shape for NS: {prediction_data.shape}")
     n_step = prediction_data.shape[-1] // 4
     for i_step in range(n_step):
-        u = prediction_data[:, 4*i_step:4*i_step+3]
-        p = prediction_data[:, [4*i_step+3]]
-        np.save(save_directory / f"nodal_U_step{i_step}.npy", u)
-        np.save(save_directory / f"nodal_p_step{i_step}.npy", p)
+        if 'ans' in dict_data:
+            answer_data = dict_data['ans']
+            au = answer_data[:, 4*i_step:4*i_step+3]
+            ap = answer_data[:, [4*i_step+3]]
+            np.save(save_directory / f"answer_nodal_U_step{i_step+1}.npy", au)
+            np.save(save_directory / f"answer_nodal_p_step{i_step+1}.npy", ap)
+        pu = prediction_data[:, 4*i_step:4*i_step+3]
+        pp = prediction_data[:, [4*i_step+3]]
+        np.save(save_directory / f"predicted_nodal_U_step{i_step+1}.npy", pu)
+        np.save(save_directory / f"predicted_nodal_p_step{i_step+1}.npy", pp)
+        # Time starts from 1 since 0 is the initial state
     print(f"Predicted data saved in: {save_directory}")
     return

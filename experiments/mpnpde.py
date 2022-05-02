@@ -245,7 +245,6 @@ class MP_PDE_Solver(torch.nn.Module):
         Returns:
             torch.Tensor: data output
         """
-        # u = torch.cat([data.x[:, i] for i in range(data.x.shape[1])], -1)
         u = torch.reshape(data.x, (data.x.shape[0], -1))
         # if DEBUG:
         #     helper.save_ns(u.detach().numpy(), pathlib.Path('tmp'))
@@ -281,11 +280,14 @@ class MP_PDE_Solver(torch.nn.Module):
         diff = torch.reshape(self.output_mlp(h[:, None]), (len(pos_x), -1))
 
         # TODO: Investigate why it was u[:, -i] not u[:, i]
+        #       -> To make prediction for next K?
         # repeated_u = torch.cat([
         #     u[:, -self.n_u + i].repeat(self.time_window, 1).transpose(0, 1)
         #     for i in range(self.n_u)], -1)
+        # repeated_u = torch.cat(
+        #     [u[:, :self.n_u]] * (u.shape[-1] // self.n_u), -1)
         repeated_u = torch.cat(
-            [u[:, :self.n_u]] * (u.shape[-1] // self.n_u), -1)
+            [u[:, -self.n_u:]] * (u.shape[-1] // self.n_u), -1)
         out = repeated_u + dt * diff
         if DEBUG:
             print('At forward')

@@ -111,7 +111,6 @@ def test(args: argparse,
     steps = [
         t for t in range(
             graph_creator.tw, graph_creator.t_res-graph_creator.tw + 1)]
-    raise ValueError(steps)
     losses = test_timestep_losses(
         model=model,
         steps=steps,
@@ -150,7 +149,8 @@ def main(args: argparse):
 
     # Load datasets
     train_dataset = datasets.NpyDataset(
-        train_string, pde=pde, mode='train')
+        train_string, pde=pde, mode='train',
+        time_window=args.time_window)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -158,7 +158,8 @@ def main(args: argparse):
         num_workers=0)
 
     valid_dataset = datasets.NpyDataset(
-        valid_string, pde=pde, mode='valid')
+        valid_string, pde=pde, mode='valid',
+        time_window=args.time_window)
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=args.batch_size,
@@ -166,7 +167,8 @@ def main(args: argparse):
         num_workers=0)
 
     test_dataset = datasets.NpyDataset(
-        test_string, pde=pde, mode='test')
+        test_string, pde=pde, mode='test',
+        time_window=args.time_window)
     test_loader = DataLoader(
         test_dataset,
         batch_size=args.batch_size,
