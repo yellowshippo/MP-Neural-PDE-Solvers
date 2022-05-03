@@ -191,9 +191,9 @@ def test_unrolled_losses(
         predictions.update({
             data_directory: {
                 'ans':
-                torch.cat(ans_tmp, -1).detach().numpy(),
+                torch.cat(ans_tmp, -1).cpu().detach().numpy(),
                 'pred':
-                torch.cat(predictions_tmp, -1).detach().numpy(),
+                torch.cat(predictions_tmp, -1).cpu().detach().numpy(),
             }
         })
         losses.append(torch.sum(torch.stack(losses_tmp)))

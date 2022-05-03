@@ -42,7 +42,7 @@ test_cpu: install
 
 flearn: install
 	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
-		--log=False --neighbors=16
+		--log=False --neighbors=4
 
 we3_cpu: install
 	$(PYTHON) experiments/train.py --device=cpu --experiment=WE3 \
