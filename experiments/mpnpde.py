@@ -124,7 +124,7 @@ class MP_PDE_Solver(torch.nn.Module):
         self,
         pde: str,
         time_window: int = 25,
-        hidden_features: int = 20,
+        hidden_features: int = 128,
         hidden_layer: int = 6,
         eq_variables: dict = {}
     ):
@@ -196,29 +196,15 @@ class MP_PDE_Solver(torch.nn.Module):
             self.output_mlp = nn.Sequential(
                 nn.Conv1d(1, 8, 15, stride=4),
                 Swish(),
-                nn.Conv1d(8, 1, 10, stride=1)
-            )
-        elif (self.time_window == 25):
-            self.output_mlp = nn.Sequential(
-                nn.Conv1d(1, 8, 16, stride=3),
-                Swish(),
-                nn.Conv1d(8, 1, 14, stride=1)
-            )
-        elif (self.time_window == 50):
-            self.output_mlp = nn.Sequential(
-                nn.Conv1d(1, 8, 12, stride=2),
-                Swish(),
-                nn.Conv1d(8, 1, 10, stride=1)
+                nn.Conv1d(8, self.n_u, 10, stride=1)
             )
         elif (self.time_window == 10):
-            # TODO: Investigate how to set 1D conv parameter shape
             if self.hidden_features == 128:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 16, stride=6),
                     Swish(),
                     nn.Conv1d(8, self.n_u, 10, stride=1)
                 )
-
             elif self.hidden_features == 20:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 1, stride=1),
@@ -228,6 +214,18 @@ class MP_PDE_Solver(torch.nn.Module):
             else:
                 raise ValueError(
                     f"Invalid hidden_features: {self.hidden_features}")
+        elif (self.time_window == 4):
+            self.output_mlp = nn.Sequential(
+                nn.Conv1d(1, 8, 15, stride=9),
+                Swish(),
+                nn.Conv1d(8, self.n_u, 10, stride=1)
+            )
+        elif (self.time_window == 2):
+            self.output_mlp = nn.Sequential(
+                nn.Conv1d(1, 8, 15, stride=54),
+                Swish(),
+                nn.Conv1d(8, self.n_u, 2, stride=1)
+            )
         else:
             raise ValueError(f"Invalid time_window: {self.time_window}")
         return
@@ -279,13 +277,6 @@ class MP_PDE_Solver(torch.nn.Module):
         # -> [batch*n_nodes, time_window * n_u]
         diff = torch.reshape(self.output_mlp(h[:, None]), (len(pos_x), -1))
 
-        # TODO: Investigate why it was u[:, -i] not u[:, i]
-        #       -> To make prediction for next K?
-        # repeated_u = torch.cat([
-        #     u[:, -self.n_u + i].repeat(self.time_window, 1).transpose(0, 1)
-        #     for i in range(self.n_u)], -1)
-        # repeated_u = torch.cat(
-        #     [u[:, :self.n_u]] * (u.shape[-1] // self.n_u), -1)
         repeated_u = torch.cat(
             [u[:, -self.n_u:]] * (u.shape[-1] // self.n_u), -1)
         out = repeated_u + dt * diff

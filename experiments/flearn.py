@@ -141,9 +141,9 @@ def main(args: argparse):
 
     if args.experiment == 'fluid':
         pde = 'ns'
-        train_string = pathlib.Path('data/flearn/comp/preprocessed/train')
-        valid_string = pathlib.Path('data/flearn/comp/preprocessed/validation')
-        test_string = pathlib.Path('data/flearn/comp/preprocessed/validation')
+        train_string = pathlib.Path('data/fluid/preprocessed/train')
+        valid_string = pathlib.Path('data/fluid/preprocessed/validation')
+        test_string = pathlib.Path('data/fluid/preprocessed/test')
     else:
         raise Exception("Wrong experiment")
 
@@ -181,16 +181,16 @@ def main(args: argparse):
         + f"{dateTimeObj.time().second}"
 
     if (args.log):
-        logfile = f"experiments/log/{args.model}_{pde}_{args.experiment}" \
+        logfile = f"experiments/log/{args.model}_{pde}_{args.experiment}_" \
             + f"n{args.neighbors}_tw{args.time_window}_" \
             + f"unrolling{args.unrolling}_time{timestring}.csv"
         print(f'Writing to log file {logfile}')
         sys.stdout = open(logfile, 'w')
 
     save_directory = pathlib.Path(
-        f"models/GNN_{pde}_{args.experiment}_"
-        + f"n{args.neighbors}_"
-        + f"tw{args.time_window}_unrolling{args.unrolling}_time{timestring}")
+        f"models/{args.model}_{pde}_{args.experiment}_"
+        + f"n{args.neighbors}_tw{args.time_window}_" \
+        + f"unrolling{args.unrolling}_time{timestring}")
     save_directory.mkdir(parents=True)
     save_path = save_directory / 'model.pt'
     print(f'Training on dataset {train_string}')
@@ -206,6 +206,7 @@ def main(args: argparse):
         model = MP_PDE_Solver(
             pde=pde,
             time_window=graph_creator.tw,
+            hidden_features=args.hidden_features,
             eq_variables={
                 'tmax': graph_creator.tmax,
                 'dt': graph_creator.dt,
@@ -281,6 +282,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--num_epochs', type=int, default=20,
         help='Number of training epochs')
+    parser.add_argument(
+        '--hidden_features', type=int, default=128,
+        help='Number of hidden features')
     parser.add_argument(
         '--lr', type=float, default=1e-4,
         help='Learning rate')

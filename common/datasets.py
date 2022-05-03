@@ -48,6 +48,7 @@ class NpyDataset(Dataset):
         self.dtype = torch.float64
         self.tw = time_window
         if self.pde == 'ns':
+            self.steps = NS_STEP
             self.nt = NS_STEP + self.tw  # Take into account padding
             self.dt = NS_DT
             self.tmin = 0.
@@ -57,7 +58,15 @@ class NpyDataset(Dataset):
         return
 
     def _collect_directories(self, path):
-        return [f.parent for f in path.glob(f"**/{self.required_file_name}")]
+        if (path / 'list.csv').is_file():
+            print(f"Reading list in: {path}")
+            with open(path / 'list.csv') as f:
+                lines = f.readlines()
+            return [pathlib.Path(l.strip()) for l in lines]
+        else:
+            print(f"Searching data in: {path}")
+            return [
+                f.parent for f in path.glob(f"**/{self.required_file_name}")]
 
     def __len__(self):
         return len(self.data_directories)
@@ -86,7 +95,8 @@ class NpyDataset(Dataset):
                                 ..., 0],
                             np.load(data_directory / f"nodal_p_step{i}.npy"),
                         ], axis=-1)
-                    for i in [0] * (self.tw - 1) + list(range(self.nt))],
+                    for i
+                    in [0] * (self.tw - 1) + list(range(self.steps + 1))],
                 # Pad first step for temporal bundling
                 axis=0))
             u_super = u_base.clone()

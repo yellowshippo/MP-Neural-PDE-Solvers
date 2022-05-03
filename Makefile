@@ -1,6 +1,6 @@
 CUDA = cu111  # CUDA version 11.1
-PYTHON ?= python3.9
-PIP ?= python3.9 -m pip
+PYTHON ?= $(HOME)/.pyenv/shims/python3
+PIP ?= $(PYTHON) -m pip
 
 IMAGE = registry.ritc.jp/ricos/machine_learning/siml:0.2.8
 
@@ -17,13 +17,13 @@ install:
 	$(PYTHON) -m pip install -e .
 
 ## Install PyTorch geometric with CPU
-install_geo_cpu: poetry
+install_geo_cpu:
 	$(PYTHON) -m pip install torch==1.9.1 torchvision==0.10.1 --extra-index-url https://download.pytorch.org/whl/cpu \
 		&& $(PYTHON) -m pip install -U torch-scatter torch-sparse==0.6.12 torch-cluster torch-spline-conv torch-geometric \
 		-f https://data.pyg.org/whl/torch-1.9.1+cpu.html
 
 ## Install PyTorch geometric with GPU
-install_geo_gpu: poetry
+install_geo_gpu:
 	$(PYTHON) -m pip install torch==1.9.1+$(strip $(CUDA)) torchvision==0.10.1+$(strip $(CUDA)) --extra-index-url https://download.pytorch.org/whl/cu111 \
 		&& $(PYTHON) -m pip install -U torch-scatter torch-sparse==0.6.12 torch-cluster torch-spline-conv torch-geometric \
 		-f https://data.pyg.org/whl/torch-1.9.1+$(strip $(CUDA)).html
@@ -43,6 +43,34 @@ test_cpu: install
 flearn: install
 	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
 		--log=False --neighbors=4
+
+f_tw20: install
+	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
+		--time_window=20 \
+		--neighbors=11 \
+		--hidden_features=128 \
+		--log=True
+
+f_tw10: install
+	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
+		--time_window=10 \
+		--neighbors=6 \
+		--hidden_features=128 \
+		--log=True
+
+f_tw4: install
+	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
+		--time_window=4 \
+		--neighbors=2 \
+		--hidden_features=128 \
+		--log=True
+
+f_tw2: install
+	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \
+		--time_window=2 \
+		--neighbors=1 \
+		--hidden_features=128 \
+		--log=True
 
 we3_cpu: install
 	$(PYTHON) experiments/train.py --device=cpu --experiment=WE3 \
