@@ -267,12 +267,12 @@ if __name__ == "__main__":
     parser.add_argument(
         '--experiment', type=str, default='fluid',
         help='Experiment for PDE solver should be trained: '
-        '[fluid, grad]')
+        '[fluid]')
 
     # Model
     parser.add_argument(
         '--model', type=str, default='GNN',
-        help='Model used as PDE solver: [GNN, BaseCNN]')
+        help='Model used as PDE solver: [GNN]')
 
     # Model parameters
     parser.add_argument(
@@ -308,6 +308,12 @@ if __name__ == "__main__":
     parser.add_argument(
         '--log', type=eval, default=False,
         help='pip the output to log file')
+    parser.add_argument(
+        '--pretrained_model_file', type=pathlib.Path, default=None,
+        help='Pretrained model file')
+    parser.add_argument(
+        '--mode', type=str, default='train',
+        help='Mode of the script: [train, predict]')
 
     args = parser.parse_args()
     main(args)
