@@ -62,7 +62,7 @@ class NpyDataset(Dataset):
             print(f"Reading list in: {path}")
             with open(path / 'list.csv') as f:
                 lines = f.readlines()
-            return [pathlib.Path(l.strip()) for l in lines]
+            return [pathlib.Path(line.strip()) for line in lines]
         else:
             print(f"Searching data in: {path}")
             return [

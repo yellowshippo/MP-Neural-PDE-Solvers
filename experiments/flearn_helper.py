@@ -1,3 +1,4 @@
+import time
 import pathlib
 from typing import Tuple
 
@@ -154,14 +155,24 @@ def test_unrolled_losses(
         losses_tmp = []
         ans_tmp = []
         predictions_tmp = []
+        print(f"Start prediction for: {data_directory}")
         with torch.no_grad():
             step = graph_creator.tw * nr_gt_steps
             print(f"Test step: {step}")
             same_steps = [step] * batch_size
             data, labels = graph_creator.create_data(u_super, same_steps)
+
+            graph_start_time = time.time()
             graph = graph_creator.create_graph(
                 data, labels, x, variables, same_steps).to(device)
+            graph_finish_time = time.time()
+            graph_time = graph_finish_time - graph_start_time
+
+            start_time = time.time()
             pred = model(graph)
+            pred0_time = time.time()
+            elapsed_time = pred0_time - start_time
+
             loss = criterion(torch.reshape(pred, graph.y.shape), graph.y)
 
             losses_tmp.append(loss / batch_size)
@@ -180,7 +191,10 @@ def test_unrolled_losses(
                 _, labels = graph_creator.create_data(u_super, same_steps)
                 graph = graph_creator.create_next_graph(
                     graph, pred, labels, same_steps).to(device)
+                before_pred_time = time.time()
                 pred = model(graph)
+                after_pred_time = time.time()
+                elapsed_time += after_pred_time - before_pred_time
                 loss = criterion(
                     torch.reshape(pred, graph.y.shape), graph.y)
 
@@ -194,9 +208,13 @@ def test_unrolled_losses(
                 torch.cat(ans_tmp, -1).cpu().detach().numpy(),
                 'pred':
                 torch.cat(predictions_tmp, -1).cpu().detach().numpy(),
+                'graph_creation_time': graph_time,
+                'prediction_time': elapsed_time,
             }
         })
         losses.append(torch.sum(torch.stack(losses_tmp)))
+        print(f"prediction time: {elapsed_time}")
+        print('--')
 
     losses = torch.stack(losses)
     print(f'Unrolled forward losses {torch.mean(losses)}')
@@ -208,6 +226,15 @@ def save_prediction(
         pde: str,
         dict_prediction: dict,
         save_directory: pathlib.Path) -> None:
+    log_file = save_directory / 'prediction.csv'
+    with open(log_file, 'w') as f:
+        f.write(
+            'data_directory, '
+            'graph_creation_time, '
+            'prediction_time, '
+            'loss_u, '
+            'loss_p, '
+            'loss\n')
     for data_directory, dict_data in dict_prediction.items():
         sample_save_directory = save_directory \
             / data_directory.parent.parent.parent.name \
@@ -215,9 +242,17 @@ def save_prediction(
             / data_directory.parent.name / data_directory.name
         sample_save_directory.mkdir(parents=True, exist_ok=True)
         if pde == 'ns':
-            save_ns(dict_data, sample_save_directory)
+            dict_loss = save_ns(dict_data, sample_save_directory)
         else:
             raise ValueError(f"Invalid PDE type: {pde}")
+        with open(log_file, 'a') as f:
+            f.write(
+                f"{data_directory}, "
+                f"{dict_data['graph_creation_time']}, "
+                f"{dict_data['prediction_time']}, "
+                f"{dict_loss['loss_u']}, "
+                f"{dict_loss['loss_p']}, "
+                f"{dict_loss['loss']}\n")
     return
 
 
@@ -230,16 +265,22 @@ def save_ns(
             f"Invalid prediction_data shape for NS: {prediction_data.shape}")
     n_step = prediction_data.shape[-1] // 4
     for i_step in range(n_step):
+        pu = prediction_data[:, 4*i_step:4*i_step+3]
+        pp = prediction_data[:, [4*i_step+3]]
+        np.save(save_directory / f"predicted_nodal_U_step{i_step+1}.npy", pu)
+        np.save(save_directory / f"predicted_nodal_p_step{i_step+1}.npy", pp)
+        # Time starts from 1 since 0 is the initial state
+
         if 'ans' in dict_data:
             answer_data = dict_data['ans']
             au = answer_data[:, 4*i_step:4*i_step+3]
             ap = answer_data[:, [4*i_step+3]]
             np.save(save_directory / f"answer_nodal_U_step{i_step+1}.npy", au)
             np.save(save_directory / f"answer_nodal_p_step{i_step+1}.npy", ap)
-        pu = prediction_data[:, 4*i_step:4*i_step+3]
-        pp = prediction_data[:, [4*i_step+3]]
-        np.save(save_directory / f"predicted_nodal_U_step{i_step+1}.npy", pu)
-        np.save(save_directory / f"predicted_nodal_p_step{i_step+1}.npy", pp)
-        # Time starts from 1 since 0 is the initial state
+
+            if i_step == n_step - 1:
+                loss_u = np.mean((pu - au)**2)
+                loss_p = np.mean((pp - pu)**2)
+                loss = np.mean([loss_u, loss_p])
     print(f"Predicted data saved in: {save_directory}")
-    return
+    return {'loss_u': loss_u, 'loss_p': loss_p, 'loss': loss}

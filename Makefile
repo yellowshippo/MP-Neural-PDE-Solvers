@@ -38,7 +38,17 @@ test: install
 
 test_cpu: install
 	$(PYTHON) experiments/flearn.py --device=cpu --experiment=fluid \
-		--log=False --neighbors=1
+		--log=False --neighbors=1 --time_window=20
+
+test_predict_cpu: install
+	$(PYTHON) experiments/flearn.py --device=cpu --experiment=fluid \
+		--log=False --neighbors=6 --time_window=10 --mode=predict \
+		--pretrained_model_file=tests/data/pretrained/GNN_ns_fluid_n6_tw10_unrolling1_time5413650/model.pt
+
+predict_tw20: install
+	OMP_NUM_THREADS=1 $(PYTHON) experiments/flearn.py --device=cpu --experiment=fluid \
+		--log=False --neighbors=11 --time_window=20 --mode=predict \
+		--pretrained_model_file=pretrained/GNN_ns_fluid_n11_tw20_unrolling1_time5413647/model.pt
 
 flearn: install
 	$(PYTHON) experiments/flearn.py --device=cuda:0 --experiment=fluid \

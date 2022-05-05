@@ -1,7 +1,6 @@
 import argparse
 import os
 import pathlib
-import sys
 from typing import Tuple
 from datetime import datetime
 
@@ -180,22 +179,20 @@ def main(args: argparse):
         + f"{dateTimeObj.time().hour}{dateTimeObj.time().minute}" \
         + f"{dateTimeObj.time().second}"
 
-    if (args.log):
-        logfile = f"experiments/log/{args.model}_{pde}_{args.experiment}_" \
-            + f"n{args.neighbors}_tw{args.time_window}_" \
-            + f"unrolling{args.unrolling}_time{timestring}.csv"
-        print(f'Writing to log file {logfile}')
-        sys.stdout = open(logfile, 'w')
+    # if (args.log):
+    #     logfile = f"experiments/log/{args.model}_{pde}_{args.experiment}_" \
+    #         + f"n{args.neighbors}_tw{args.time_window}_" \
+    #         + f"unrolling{args.unrolling}_time{timestring}.csv"
+    #     print(f'Writing to log file {logfile}')
+    #     sys.stdout = open(logfile, 'w')
 
     save_directory = pathlib.Path(
         f"models/{args.model}_{pde}_{args.experiment}_"
-        + f"n{args.neighbors}_tw{args.time_window}_" \
+        + f"n{args.neighbors}_tw{args.time_window}_"
         + f"unrolling{args.unrolling}_time{timestring}")
     save_directory.mkdir(parents=True)
-    save_path = save_directory / 'model.pt'
     print(f'Training on dataset {train_string}')
     print(device)
-    print(save_path)
 
     graph_creator = datasets.GraphCreator(
         pde=pde,
@@ -214,49 +211,77 @@ def main(args: argparse):
         ).to(device)
     else:
         raise Exception("Wrong model specified")
+    if args.pretrained_model_file:
+        model_state_dict = torch.load(
+            args.pretrained_model_file, map_location=args.device)
+        model.load_state_dict(model_state_dict)
 
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     print(f'Number of parameters: {params}')
+    criterion = torch.nn.MSELoss(reduction="sum")
 
     # Optimizer
-    optimizer = optim.AdamW(model.parameters(), lr=args.lr)
-    scheduler = optim.lr_scheduler.MultiStepLR(
-        optimizer, milestones=[args.unrolling, 5, 10, 15], gamma=args.lr_decay)
+    if args.mode == 'train':
+        optimizer = optim.AdamW(model.parameters(), lr=args.lr)
+        scheduler = optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=[args.unrolling, 5, 10, 15],
+            gamma=args.lr_decay)
 
-    # Training loop
-    min_val_loss = 10e30
-    test_loss = 10e30
-    criterion = torch.nn.MSELoss(reduction="sum")
-    for epoch in range(args.num_epochs):
-        print(f"Epoch {epoch}")
-        train(
-            args, pde, epoch, model, optimizer, train_loader, graph_creator,
-            criterion, device=device)
-        print("Evaluation on validation dataset:")
-        val_loss, _ = test(
-            args, pde, model, valid_loader, graph_creator, criterion,
-            device=device)
-        if (val_loss < min_val_loss):
-            print("Evaluation on test dataset:")
-            test_loss, test_prediction = test(
-                args, pde, model, test_loader, graph_creator, criterion,
+        # Training loop
+        min_val_loss = 10e30
+        test_loss = 10e30
+        for epoch in range(args.num_epochs):
+            print(f"Epoch {epoch}")
+            train(
+                args, pde, epoch, model, optimizer, train_loader,
+                graph_creator, criterion, device=device)
+            print("Evaluation on validation dataset:")
+            val_loss, _ = test(
+                args, pde, model, valid_loader, graph_creator, criterion,
                 device=device)
-
             # Save model
-            torch.save(model.state_dict(), save_path)
-            print(f"Saved model at {save_path}")
+            # save_path = save_directory / f"model_epoch{epoch}.pt"
+            # torch.save(model.state_dict(), save_path)
+            # print(f"Saved model at {save_path}")
 
-            # Save prediction
-            save_prediction(pde, test_prediction, save_directory)
+            if (val_loss < min_val_loss):
+                print("Evaluation on test dataset:")
+                test_loss, test_prediction = test(
+                    args, pde, model, test_loader, graph_creator, criterion,
+                    device=device)
+                # Save model
+                save_path = save_directory / 'model.pt'
+                torch.save(model.state_dict(), save_path)
+                print(f"Saved model at {save_path}")
+
+                # Save prediction
+                save_prediction(pde, test_prediction, save_directory)
+                min_val_loss = val_loss
 
             print('--')
+            scheduler.step()
 
-            min_val_loss = val_loss
+        print(f"Test loss: {test_loss}")
 
-        scheduler.step()
+    elif args.mode == 'predict':
+        steps = [
+            t for t in range(
+                graph_creator.tw, graph_creator.t_res-graph_creator.tw + 1)]
+        test_losses, test_prediction = test_unrolled_losses(
+            model=model,
+            steps=steps,
+            batch_size=args.batch_size,
+            nr_gt_steps=args.nr_gt_steps,
+            loader=test_loader,
+            graph_creator=graph_creator,
+            criterion=criterion,
+            device=device)
 
-    print(f"Test loss: {test_loss}")
+        # Save prediction
+        save_prediction(pde, test_prediction, save_directory)
+
+    return
 
 
 if __name__ == "__main__":
