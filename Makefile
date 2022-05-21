@@ -1,18 +1,13 @@
 CUDA = cu111  # CUDA version 11.1
-PYTHON ?= $(HOME)/.pyenv/shims/python3
-PIP ?= $(PYTHON) -m pip
-
-IMAGE = registry.ritc.jp/ricos/machine_learning/siml:0.2.8
+PYTHON ?= poetry run python3
+PIP ?= pip3
 
 
-in:
-	docker run -w /src -it --gpus all -v${PWD}:/src --rm $(IMAGE)
+install: poetry install_geo_gpu
+	$(PYTHON) -m pip install h5py
+	$(PYTHON) -m pip install -e .
 
-in_cpu:
-	docker run -w /src -it -v${PWD}:/src --rm $(IMAGE)
-
-
-install:
+install_cpu: poetry install_geo_gpu_cpu
 	$(PYTHON) -m pip install h5py
 	$(PYTHON) -m pip install -e .
 
