@@ -1,6 +1,7 @@
 import argparse
 import os
 import pathlib
+from distutils.util import strtobool
 from typing import Tuple
 from datetime import datetime
 
@@ -142,28 +143,33 @@ def main(args: argparse):
         pde = 'ns'
         train_string = pathlib.Path('data/fluid/preprocessed/train')
         valid_string = pathlib.Path('data/fluid/preprocessed/validation')
-        test_string = pathlib.Path('data/fluid/preprocessed/test')
+        if args.transformed:
+            test_string = pathlib.Path(
+                'data/fluid/transformed/preprocessed/test')
+        else:
+            test_string = pathlib.Path('data/fluid/preprocessed/test')
     else:
         raise Exception("Wrong experiment")
 
     # Load datasets
-    train_dataset = datasets.NpyDataset(
-        train_string, pde=pde, mode='train',
-        time_window=args.time_window)
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=0)
+    if args.mode == 'train':
+        train_dataset = datasets.NpyDataset(
+            train_string, pde=pde, mode='train',
+            time_window=args.time_window)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=0)
 
-    valid_dataset = datasets.NpyDataset(
-        valid_string, pde=pde, mode='valid',
-        time_window=args.time_window)
-    valid_loader = DataLoader(
-        valid_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=0)
+        valid_dataset = datasets.NpyDataset(
+            valid_string, pde=pde, mode='valid',
+            time_window=args.time_window)
+        valid_loader = DataLoader(
+            valid_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=0)
 
     test_dataset = datasets.NpyDataset(
         test_string, pde=pde, mode='test',
@@ -279,7 +285,8 @@ def main(args: argparse):
             device=device)
 
         # Save prediction
-        save_prediction(pde, test_prediction, save_directory)
+        save_prediction(
+            pde, test_prediction, save_directory, transformed=args.transformed)
 
     return
 
@@ -343,6 +350,11 @@ if __name__ == "__main__":
     parser.add_argument(
         '--mode', type=str, default='train',
         help='Mode of the script: [train, predict]')
+    parser.add_argument(
+        '--transformed',
+        type=strtobool,
+        default=0,
+        help='If True, prediction on the transformed dataset [False]')
 
     args = parser.parse_args()
     main(args)

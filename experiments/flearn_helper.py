@@ -225,7 +225,8 @@ def test_unrolled_losses(
 def save_prediction(
         pde: str,
         dict_prediction: dict,
-        save_directory: pathlib.Path) -> None:
+        save_directory: pathlib.Path,
+        transformed=False) -> None:
     log_file = save_directory / 'prediction.csv'
     with open(log_file, 'w') as f:
         f.write(
@@ -236,10 +237,17 @@ def save_prediction(
             'loss_p, '
             'loss\n')
     for data_directory, dict_data in dict_prediction.items():
-        sample_save_directory = save_directory \
-            / data_directory.parent.parent.parent.name \
-            / data_directory.parent.parent.name \
-            / data_directory.parent.name / data_directory.name
+        if transformed:
+            sample_save_directory = save_directory \
+                / data_directory.parent.parent.parent.parent.name \
+                / data_directory.parent.parent.parent.name \
+                / data_directory.parent.parent.name \
+                / data_directory.parent.name / data_directory.name
+        else:
+            sample_save_directory = save_directory \
+                / data_directory.parent.parent.parent.name \
+                / data_directory.parent.parent.name \
+                / data_directory.parent.name / data_directory.name
         sample_save_directory.mkdir(parents=True, exist_ok=True)
         if pde == 'ns':
             dict_loss = save_ns(dict_data, sample_save_directory)
