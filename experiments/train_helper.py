@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import random
 from torch.utils.data import DataLoader
-from common.utils import GraphCreator
+from common.datasets import GraphCreator
 
 
 DEBUG = False

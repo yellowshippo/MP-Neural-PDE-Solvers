@@ -5,7 +5,7 @@ from torch import nn
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, InstanceNorm
 
-import experiments.flearn_helper as helper
+import experiments.train_helper as helper
 
 
 LEN_U_NS = 4  # (u, p)

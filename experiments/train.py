@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 import common.datasets as datasets
 from experiments.mpnpde import MP_PDE_Solver
-from experiments.flearn_helper \
+from experiments.train_helper \
     import training_loop, test_timestep_losses, test_unrolled_losses, \
     save_prediction
 
@@ -141,13 +141,13 @@ def main(args: argparse):
 
     if args.experiment == 'fluid':
         pde = 'ns'
-        train_string = pathlib.Path('data/fluid/preprocessed/train')
-        valid_string = pathlib.Path('data/fluid/preprocessed/validation')
+        train_string = pathlib.Path('../data/fluid/preprocessed/train')
+        valid_string = pathlib.Path('../data/fluid/preprocessed/validation')
         if args.transformed:
             test_string = pathlib.Path(
-                'data/fluid/transformed/preprocessed/test')
+                '../data/fluid/transformed/preprocessed/test')
         else:
-            test_string = pathlib.Path('data/fluid/preprocessed/test')
+            test_string = pathlib.Path('../data/fluid/preprocessed/test')
     else:
         raise Exception("Wrong experiment")
 
@@ -192,10 +192,13 @@ def main(args: argparse):
     #     print(f'Writing to log file {logfile}')
     #     sys.stdout = open(logfile, 'w')
 
-    save_directory = pathlib.Path(
-        f"models/{args.model}_{pde}_{args.experiment}_"
-        + f"n{args.neighbors}_tw{args.time_window}_"
-        + f"unrolling{args.unrolling}_time{timestring}")
+    if args.save_directory is None:
+        save_directory = pathlib.Path(
+            f"models/MPPDE_{pde}_{args.experiment}_"
+            + f"n{args.neighbors}_tw{args.time_window}_"
+            + f"unrolling{args.unrolling}_time{timestring}")
+    else:
+        save_directory = args.save_directory
     save_directory.mkdir(parents=True)
     print(f'Training on dataset {train_string}')
     print(device)
@@ -355,6 +358,11 @@ if __name__ == "__main__":
         type=strtobool,
         default=0,
         help='If True, prediction on the transformed dataset [False]')
+    parser.add_argument(
+        '--save_directory',
+        type=pathlib.Path,
+        default=None,
+        help='Path to save data')
 
     args = parser.parse_args()
     main(args)

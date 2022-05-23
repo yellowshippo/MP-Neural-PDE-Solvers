@@ -9,8 +9,6 @@ from typing import Tuple
 from torch_geometric.data import Data
 from torch_cluster import radius_graph
 
-import experiments.flearn_helper as helper
-
 
 NS_STEP = 40
 NS_DT = .1
@@ -189,11 +187,6 @@ class GraphCreator(nn.Module):
             label = dp[step:self.tw + step]
             data = torch.cat((data, d[None, :]), 0)
             labels = torch.cat((labels, label[None, :]), 0)
-        if DEBUG:
-            print('At data creation')
-            print(data[0, 1, 100:110, :])
-            helper.save_ns(data[0, 0].numpy(), pathlib.Path('tmp/pred'))
-            helper.save_ns(labels[0, 0].numpy(), pathlib.Path('tmp/ans'))
 
         return data, labels
 
