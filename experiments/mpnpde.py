@@ -193,11 +193,35 @@ class MP_PDE_Solver(torch.nn.Module):
 
         # Decoder CNN, maps to different outputs (temporal bundling)
         if (self.time_window == 20):
-            self.output_mlp = nn.Sequential(
-                nn.Conv1d(1, 8, 15, stride=4),
-                Swish(),
-                nn.Conv1d(8, self.n_u, 10, stride=1)
-            )
+            if self.hidden_features == 128:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 15, stride=4),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                )
+            elif self.hidden_features == 64:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 15, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 31, stride=1)
+                )
+            elif self.hidden_features == 32:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 2, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 12, stride=1)
+                )
+            elif self.hidden_features == 16:
+                raise NotImplementedError(
+                    'Good parameters not found for hiddenfeatures 16, tw 20')
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 1, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 1, stride=1)
+                )
+            else:
+                raise ValueError(
+                    f"Invalid hidden_features: {self.hidden_features}")
         elif (self.time_window == 10):
             if self.hidden_features == 128:
                 self.output_mlp = nn.Sequential(
@@ -205,27 +229,83 @@ class MP_PDE_Solver(torch.nn.Module):
                     Swish(),
                     nn.Conv1d(8, self.n_u, 10, stride=1)
                 )
-            elif self.hidden_features == 20:
+            elif self.hidden_features == 64:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 16, stride=3),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 8, stride=1)
+                )
+            elif self.hidden_features == 32:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 1, stride=1),
                     Swish(),
-                    nn.Conv1d(8, self.n_u, 1, stride=2)
+                    nn.Conv1d(8, self.n_u, 23, stride=1)
+                )
+            elif self.hidden_features == 16:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 1, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 7, stride=1)
                 )
             else:
                 raise ValueError(
                     f"Invalid hidden_features: {self.hidden_features}")
         elif (self.time_window == 4):
-            self.output_mlp = nn.Sequential(
-                nn.Conv1d(1, 8, 15, stride=9),
-                Swish(),
-                nn.Conv1d(8, self.n_u, 10, stride=1)
-            )
+            if self.hidden_features == 128:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 16, stride=6),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                )
+            elif self.hidden_features == 64:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 16, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                )
+            elif self.hidden_features == 32:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 10, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 20, stride=1)
+                )
+            elif self.hidden_features == 16:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 10, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 4, stride=1)
+                )
+            else:
+                raise ValueError(
+                    f"Invalid hidden_features: {self.hidden_features}")
         elif (self.time_window == 2):
-            self.output_mlp = nn.Sequential(
-                nn.Conv1d(1, 8, 15, stride=54),
-                Swish(),
-                nn.Conv1d(8, self.n_u, 2, stride=1)
-            )
+            if self.hidden_features == 128:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 15, stride=54),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 2, stride=1)
+                )
+            elif self.hidden_features == 64:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 1, stride=5),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 12, stride=1)
+                )
+            elif self.hidden_features == 32:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 1, stride=2),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 15, stride=1)
+                )
+            elif self.hidden_features == 16:
+                self.output_mlp = nn.Sequential(
+                    nn.Conv1d(1, 8, 1, stride=1),
+                    Swish(),
+                    nn.Conv1d(8, self.n_u, 15, stride=1)
+                )
+            else:
+                raise ValueError(
+                    f"Invalid hidden_features: {self.hidden_features}")
         else:
             raise ValueError(f"Invalid time_window: {self.time_window}")
         return
@@ -279,6 +359,11 @@ class MP_PDE_Solver(torch.nn.Module):
 
         repeated_u = torch.cat(
             [u[:, -self.n_u:]] * (u.shape[-1] // self.n_u), -1)
+        if DEBUG:
+            print(f"repeated_u: {repeated_u.shape}")
+            print(f"dt: {dt.shape}")
+            print(f"diff: {diff.shape}")
+
         out = repeated_u + dt * diff
         if DEBUG:
             print('At forward')

@@ -3,6 +3,7 @@ PYTHON ?= poetry run python3
 PIP ?= pip3
 
 SAVE_DIRECTORY = none
+HIDDEN_FEATURES = 128  # 16 32 64 128
 
 
 install: poetry install_geo_gpu
@@ -35,28 +36,28 @@ train_tw20:
 	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=fluid \
 		--time_window=20 \
 		--neighbors=11 \
-		--hidden_features=128 \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--log=True
 
 train_tw10:
 	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=fluid \
 		--time_window=10 \
 		--neighbors=6 \
-		--hidden_features=128 \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--log=True
 
 train_tw4:
 	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=fluid \
 		--time_window=4 \
 		--neighbors=2 \
-		--hidden_features=128 \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--log=True
 
 train_tw2:
 	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=fluid \
 		--time_window=2 \
 		--neighbors=1 \
-		--hidden_features=128 \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--log=True
 
 
@@ -118,6 +119,13 @@ transformed_eval_tw2:
 test: install
 	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=fluid \
 		--log=False --neighbors=1
+
+test_param:
+	$(PYTHON) experiments/train.py --device=cuda:0 --experiment=fluid \
+		--time_window=$(TW) \
+		--neighbors=1 \
+		--hidden_features=$(HIDDEN_FEATURES) \
+		--log=True
 
 test_cpu: install_cpu
 	$(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
