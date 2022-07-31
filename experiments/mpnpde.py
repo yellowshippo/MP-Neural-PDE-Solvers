@@ -259,9 +259,9 @@ class MP_PDE_Solver(torch.nn.Module):
                 )
             elif self.hidden_features == 64:
                 self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 16, stride=1),
+                    nn.Conv1d(1, 8, 61, stride=1),
                     Swish(),
-                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                    nn.Conv1d(8, self.n_u, 1, stride=1)
                 )
             elif self.hidden_features == 32:
                 self.output_mlp = nn.Sequential(
