@@ -3,7 +3,7 @@ PYTHON ?= poetry run python3
 PIP ?= pip3
 
 SAVE_DIRECTORY = none
-HIDDEN_FEATURES = 128  # 16 32 64 128
+HIDDEN_FEATURES ?= 128  # 32 64 128
 
 
 install: poetry install_geo_gpu
@@ -65,30 +65,35 @@ train_tw2:
 eval_tw20:
 	OMP_NUM_THREADS=1 $(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=11 --time_window=20 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--pretrained_model_file=$(MODEL_PATH)
 
 eval_tw10:
 	OMP_NUM_THREADS=1 $(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=6 --time_window=10 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--pretrained_model_file=$(MODEL_PATH)
 
 eval_tw4:
 	OMP_NUM_THREADS=1 $(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=2 --time_window=4 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--pretrained_model_file=$(MODEL_PATH)
 
 eval_tw2:
 	OMP_NUM_THREADS=1 $(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=1 --time_window=2 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--pretrained_model_file=$(MODEL_PATH)
 
 transformed_eval_tw20:
 	$(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=11 --time_window=20 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--pretrained_model_file=$(MODEL_PATH) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--transformed=true
@@ -96,6 +101,7 @@ transformed_eval_tw20:
 transformed_eval_tw10:
 	$(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=6 --time_window=10 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--pretrained_model_file=$(MODEL_PATH) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--transformed=true
@@ -103,6 +109,7 @@ transformed_eval_tw10:
 transformed_eval_tw4:
 	$(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=2 --time_window=4 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--pretrained_model_file=$(MODEL_PATH) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--transformed=true
@@ -110,6 +117,7 @@ transformed_eval_tw4:
 transformed_eval_tw2:
 	$(PYTHON) experiments/train.py --device=cpu --experiment=fluid \
 		--log=False --neighbors=1 --time_window=2 --mode=predict \
+		--hidden_features=$(HIDDEN_FEATURES) \
 		--pretrained_model_file=$(MODEL_PATH) \
 		--save_directory=$(SAVE_DIRECTORY) \
 		--transformed=true
