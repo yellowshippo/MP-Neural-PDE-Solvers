@@ -43,13 +43,28 @@ def training_loop(
         optimizer.zero_grad()
         # Randomly choose number of unrollings
         unrolled_graphs = random.choice(unrolling)
+        # steps = [
+        #     t for t in range(
+        #         graph_creator.tw,
+        #         graph_creator.t_res - graph_creator.tw
+        #         - (graph_creator.tw * unrolled_graphs) + 1)]
         steps = [
             t for t in range(
                 graph_creator.tw,
-                graph_creator.t_res - graph_creator.tw
+                u_super.shape[1] - graph_creator.tw
                 - (graph_creator.tw * unrolled_graphs) + 1)]
+        if len(steps) == 0:
+            # Force unrolling 0 when time series is not long enough
+            unrolled_graphs = 0
+            steps = [
+                t for t in range(
+                    graph_creator.tw,
+                    graph_creator.t_res - graph_creator.tw
+                    - (graph_creator.tw * unrolled_graphs) + 1)]
         # Randomly choose starting (time) point at the PDE solution manifold
         random_steps = random.choices(steps, k=batch_size)
+        # print(f"{steps = }")
+        # print(f"{random_steps = }")
         data, labels = graph_creator.create_data(u_super, random_steps)
         graph = graph_creator.create_graph(
             data, labels, x, variables, random_steps).to(device)
@@ -65,10 +80,11 @@ def training_loop(
                     graph, pred, labels, random_steps).to(device)
 
         pred = model(graph)
+        # print(unrolled_graphs, pred.shape, graph.y.shape)
         loss = criterion(torch.reshape(pred, graph.y.shape), graph.y)
         if DEBUG:
-            save_ns(pred.detach().numpy(), pathlib.Path('tmp/pred'))
-            save_ns(
+            save_mixture(pred.detach().numpy(), pathlib.Path('tmp/pred'))
+            save_mixture(
                 pred.reshape(pred.shape).detach().numpy(),
                 pathlib.Path('tmp/ans'))
 
@@ -88,6 +104,7 @@ def test_timestep_losses(
         loader: DataLoader,
         graph_creator: GraphCreator,
         criterion: torch.nn.modules.loss,
+        max_step: int = 16,
         device: torch.cuda.device = "cpu") -> None:
     """
     Loss for one neural network forward pass at certain timepoints on the
@@ -106,6 +123,8 @@ def test_timestep_losses(
     """
 
     for step in steps:
+        if step > max_step:
+            return
 
         if (step != graph_creator.tw and step % graph_creator.tw != 0):
             continue
@@ -123,6 +142,7 @@ def test_timestep_losses(
 
         losses = torch.stack(losses)
         print(f'Step {step}, mean loss {torch.mean(losses)}')
+    return
 
 
 def test_unrolled_losses(
@@ -133,6 +153,7 @@ def test_unrolled_losses(
         loader: DataLoader,
         graph_creator: GraphCreator,
         criterion: torch.nn.modules.loss,
+        max_step: int = 16,
         device: torch.cuda.device = "cpu") -> Tuple[torch.Tensor, dict]:
     """
     Loss for full trajectory unrolling, we report this loss in the paper
@@ -185,6 +206,8 @@ def test_unrolled_losses(
                     graph_creator.tw * (nr_gt_steps + 1),
                     graph_creator.t_res - graph_creator.tw + 1,
                     graph_creator.tw):
+                if step > max_step:
+                    break
                 # TODO: Investigate appropreate nr_gt_steps value
                 print(f"Test step: {step}")
                 same_steps = [step] * batch_size
@@ -235,6 +258,7 @@ def save_prediction(
             'prediction_time, '
             'loss_u, '
             'loss_p, '
+            'loss_alpha, '
             'loss\n')
     for data_directory, dict_data in dict_prediction.items():
         if transformed:
@@ -249,8 +273,8 @@ def save_prediction(
                 / data_directory.parent.parent.name \
                 / data_directory.parent.name / data_directory.name
         sample_save_directory.mkdir(parents=True, exist_ok=True)
-        if pde == 'ns':
-            dict_loss = save_ns(dict_data, sample_save_directory)
+        if pde == 'mixture':
+            dict_loss = save_mixture(dict_data, sample_save_directory)
         else:
             raise ValueError(f"Invalid PDE type: {pde}")
         with open(log_file, 'a') as f:
@@ -260,35 +284,50 @@ def save_prediction(
                 f"{dict_data['prediction_time']}, "
                 f"{dict_loss['loss_u']}, "
                 f"{dict_loss['loss_p']}, "
+                f"{dict_loss['loss_alpha']}, "
                 f"{dict_loss['loss']}\n")
     return
 
 
-def save_ns(
+def save_mixture(
         dict_data: dict,
         save_directory: pathlib.Path) -> None:
     prediction_data = dict_data['pred']
-    if prediction_data.shape[-1] % 4 != 0:
+    n_feature = 5  # ux, uy, uz, p, alpha
+    if prediction_data.shape[-1] % n_feature != 0:
         raise ValueError(
-            f"Invalid prediction_data shape for NS: {prediction_data.shape}")
-    n_step = prediction_data.shape[-1] // 4
+            'Invalid prediction_data shape for Mixture: '
+            f"{prediction_data.shape}")
+    n_step = prediction_data.shape[-1] // n_feature
     for i_step in range(n_step):
-        pu = prediction_data[:, 4*i_step:4*i_step+3]
-        pp = prediction_data[:, [4*i_step+3]]
-        np.save(save_directory / f"predicted_nodal_U_step{i_step+1}.npy", pu)
+        # 3 means ux, uy, uz
+        pu = prediction_data[:, n_feature*i_step:n_feature*i_step+3]
+        pp = prediction_data[:, [n_feature*i_step+3]]
+        palpha = prediction_data[:, [n_feature*i_step+3+1]]
+        np.save(save_directory / f"predicted_nodal_u_step{i_step+1}.npy", pu)
         np.save(save_directory / f"predicted_nodal_p_step{i_step+1}.npy", pp)
+        np.save(
+            save_directory / f"predicted_nodal_alpha_step{i_step+1}.npy",
+            palpha)
         # Time starts from 1 since 0 is the initial state
 
         if 'ans' in dict_data:
             answer_data = dict_data['ans']
-            au = answer_data[:, 4*i_step:4*i_step+3]
-            ap = answer_data[:, [4*i_step+3]]
-            np.save(save_directory / f"answer_nodal_U_step{i_step+1}.npy", au)
+            au = answer_data[:, n_feature*i_step:n_feature*i_step+3]
+            ap = answer_data[:, [n_feature*i_step+3]]
+            aalpha = answer_data[:, [n_feature*i_step+3+1]]
+            np.save(save_directory / f"answer_nodal_u_step{i_step+1}.npy", au)
             np.save(save_directory / f"answer_nodal_p_step{i_step+1}.npy", ap)
+            np.save(
+                save_directory / f"answer_nodal_alpha_step{i_step+1}.npy",
+                aalpha)
 
             if i_step == n_step - 1:
                 loss_u = np.mean((pu - au)**2)
-                loss_p = np.mean((pp - pu)**2)
-                loss = np.mean([loss_u, loss_p])
+                loss_p = np.mean((pp - ap)**2)
+                loss_alpha = np.mean((palpha - aalpha)**2)
+                loss = np.mean([loss_u, loss_p, loss_alpha])
     print(f"Predicted data saved in: {save_directory}")
-    return {'loss_u': loss_u, 'loss_p': loss_p, 'loss': loss}
+    return {
+        'loss_u': loss_u, 'loss_p': loss_p, 'loss_alpha': loss_alpha,
+        'loss': loss}

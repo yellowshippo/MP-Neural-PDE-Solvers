@@ -1,7 +1,6 @@
 import argparse
 import os
 import pathlib
-from distutils.util import strtobool
 from typing import Tuple
 from datetime import datetime
 
@@ -23,8 +22,6 @@ def check_directory() -> None:
     """
     if not os.path.exists('experiments/log'):
         os.mkdir('experiments/log')
-    if not os.path.exists('models'):
-        os.mkdir('models')
 
 
 def train(
@@ -139,15 +136,22 @@ def main(args: argparse):
     device = args.device
     check_directory()
 
-    if args.experiment == 'fluid':
-        pde = 'ns'
-        train_string = pathlib.Path('../data/fluid/preprocessed/train')
-        valid_string = pathlib.Path('../data/fluid/preprocessed/validation')
-        if args.transformed:
+    if args.experiment == 'mixture':
+        pde = 'mixture'
+        train_string = pathlib.Path('../data/mixture/preprocessed/train')
+        valid_string = pathlib.Path('../data/mixture/preprocessed/validation')
+        if args.data_type == 'ref':
+            test_string = pathlib.Path('../data/mixture/preprocessed/test')
+        elif args.data_type == 'rotation':
             test_string = pathlib.Path(
-                '../data/fluid/transformed/preprocessed/test')
+                '../data/mixture/transformed/preprocessed/test/rotation')
+        elif args.data_type == 'scaling':
+            test_string = pathlib.Path(
+                '../data/mixture/transformed/preprocessed/test/scaling')
+        elif args.data_type == 'taller':
+            test_string = pathlib.Path('../data/mixture/taller/preprocessed')
         else:
-            test_string = pathlib.Path('../data/fluid/preprocessed/test')
+            raise ValueError(f"Unexpected data_type: {args.data_type}")
     else:
         raise Exception("Wrong experiment")
 
@@ -181,9 +185,11 @@ def main(args: argparse):
         num_workers=0)
 
     dateTimeObj = datetime.now()
-    timestring = f"{dateTimeObj.date().month}{dateTimeObj.date().day}" \
-        + f"{dateTimeObj.time().hour}{dateTimeObj.time().minute}" \
-        + f"{dateTimeObj.time().second}"
+    timestring = f"{dateTimeObj.date().year}" \
+        + f"-{dateTimeObj.date().month:02d}" \
+        + f"-{dateTimeObj.date().day:02d}" \
+        + f"_{dateTimeObj.time().hour:02d}{dateTimeObj.time().minute:02d}" \
+        + f"-{dateTimeObj.time().second:02d}"
 
     # if (args.log):
     #     logfile = f"experiments/log/{args.model}_{pde}_{args.experiment}_" \
@@ -194,12 +200,14 @@ def main(args: argparse):
 
     if args.save_directory is None:
         save_directory = pathlib.Path(
-            f"models/MPPDE_{pde}_{args.experiment}_"
-            + f"n{args.neighbors}_tw{args.time_window}_"
+            f"../results/mixture/mppde/models/MPPDE_{pde}_{args.experiment}_"
+            + f"f{args.hidden_features}_n{args.neighbors}_"
+            + f"tw{args.time_window}_"
             + f"unrolling{args.unrolling}_time{timestring}")
     else:
         save_directory = args.save_directory
-    save_directory.mkdir(parents=True)
+    print(f"Save directory: {save_directory}")
+    save_directory.mkdir(parents=True, exist_ok=True)
     print(f'Training on dataset {train_string}')
     print(device)
 
@@ -288,8 +296,7 @@ def main(args: argparse):
             device=device)
 
         # Save prediction
-        save_prediction(
-            pde, test_prediction, save_directory, transformed=args.transformed)
+        save_prediction(pde, test_prediction, save_directory)
 
     return
 
@@ -301,9 +308,9 @@ if __name__ == "__main__":
     parser.add_argument(
         '--device', type=str, default='cpu', help='Used device')
     parser.add_argument(
-        '--experiment', type=str, default='fluid',
+        '--experiment', type=str, default='mixture',
         help='Experiment for PDE solver should be trained: '
-        '[fluid]')
+        '[mixture]')
 
     # Model
     parser.add_argument(
@@ -315,7 +322,7 @@ if __name__ == "__main__":
         '--batch_size', type=int, default=1,
         help='Number of samples in each minibatch')
     parser.add_argument(
-        '--num_epochs', type=int, default=20,
+        '--num_epochs', type=int, default=2000,
         help='Number of training epochs')
     parser.add_argument(
         '--hidden_features', type=int, default=128,
@@ -354,10 +361,10 @@ if __name__ == "__main__":
         '--mode', type=str, default='train',
         help='Mode of the script: [train, predict]')
     parser.add_argument(
-        '--transformed',
-        type=strtobool,
-        default=0,
-        help='If True, prediction on the transformed dataset [False]')
+        '--data_type',
+        type=str,
+        default='ref',
+        help='Dataset type [ref, rotation, scaling, taller]')
     parser.add_argument(
         '--save_directory',
         type=pathlib.Path,
@@ -366,3 +373,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(args)
+    print('Finished')

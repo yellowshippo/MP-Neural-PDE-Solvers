@@ -1,15 +1,15 @@
-import pathlib
+# import pathlib
 
 import torch
 from torch import nn
 from torch_geometric.data import Data
 from torch_geometric.nn import MessagePassing, InstanceNorm
 
-import experiments.train_helper as helper
+# import experiments.train_helper as helper
 
 
-LEN_U_NS = 4  # (u, p)
-N_PARAM_NS = 14
+LEN_U_MIXTURE = 5  # (u, p, alpha)
+N_PARAM_MIXTURE = 15  # (4, 4, 3, 3, 1), `variables` in common.datasets
 DIM = 3
 
 DEBUG = False
@@ -57,8 +57,8 @@ class GNN_Layer(MessagePassing):
         self.hidden_features = hidden_features
 
         self.pde = pde
-        if self.pde == 'ns':
-            len_u = LEN_U_NS
+        if self.pde == 'mixture':
+            len_u = LEN_U_MIXTURE
         else:
             raise ValueError(f"Invalid PDE type: {self.pde}")
 
@@ -152,9 +152,9 @@ class MP_PDE_Solver(torch.nn.Module):
         self.time_window = time_window
         self.eq_variables = eq_variables
 
-        if self.pde == 'ns':
-            self.n_u = LEN_U_NS
-            self.n_parameter_feature = N_PARAM_NS
+        if self.pde == 'mixture':
+            self.n_u = LEN_U_MIXTURE
+            self.n_parameter_feature = N_PARAM_MIXTURE
         else:
             raise ValueError(f"Invalid PDE type: {self.pde}")
 
@@ -192,60 +192,24 @@ class MP_PDE_Solver(torch.nn.Module):
         )
 
         # Decoder CNN, maps to different outputs (temporal bundling)
-        if (self.time_window == 20):
-            if self.hidden_features == 128:
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 15, stride=4),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 10, stride=1)
-                )
-            elif self.hidden_features == 64:
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 15, stride=1),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 31, stride=1)
-                )
-            elif self.hidden_features == 32:
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 2, stride=1),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 12, stride=1)
-                )
-            elif self.hidden_features == 16:
-                raise NotImplementedError(
-                    'Good parameters not found for hiddenfeatures 16, tw 20')
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 1, stride=1),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 1, stride=1)
-                )
-            else:
-                raise ValueError(
-                    f"Invalid hidden_features: {self.hidden_features}")
-        elif (self.time_window == 10):
+        if (self.time_window == 8):
             if self.hidden_features == 128:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 16, stride=6),
                     Swish(),
-                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                    nn.Conv1d(8, self.n_u, 12, stride=1)
                 )
             elif self.hidden_features == 64:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 16, stride=3),
                     Swish(),
-                    nn.Conv1d(8, self.n_u, 8, stride=1)
+                    nn.Conv1d(8, self.n_u, 10, stride=1)
                 )
             elif self.hidden_features == 32:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 1, stride=1),
                     Swish(),
-                    nn.Conv1d(8, self.n_u, 23, stride=1)
-                )
-            elif self.hidden_features == 16:
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 1, stride=1),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 7, stride=1)
+                    nn.Conv1d(8, self.n_u, 25, stride=1)
                 )
             else:
                 raise ValueError(
@@ -255,7 +219,7 @@ class MP_PDE_Solver(torch.nn.Module):
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 16, stride=6),
                     Swish(),
-                    nn.Conv1d(8, self.n_u, 10, stride=1)
+                    nn.Conv1d(8, self.n_u, 10, stride=3)
                 )
             elif self.hidden_features == 64:
                 self.output_mlp = nn.Sequential(
@@ -268,12 +232,6 @@ class MP_PDE_Solver(torch.nn.Module):
                     nn.Conv1d(1, 8, 10, stride=1),
                     Swish(),
                     nn.Conv1d(8, self.n_u, 20, stride=1)
-                )
-            elif self.hidden_features == 16:
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 10, stride=1),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 4, stride=1)
                 )
             else:
                 raise ValueError(
@@ -294,12 +252,6 @@ class MP_PDE_Solver(torch.nn.Module):
             elif self.hidden_features == 32:
                 self.output_mlp = nn.Sequential(
                     nn.Conv1d(1, 8, 1, stride=2),
-                    Swish(),
-                    nn.Conv1d(8, self.n_u, 15, stride=1)
-                )
-            elif self.hidden_features == 16:
-                self.output_mlp = nn.Sequential(
-                    nn.Conv1d(1, 8, 1, stride=1),
                     Swish(),
                     nn.Conv1d(8, self.n_u, 15, stride=1)
                 )
@@ -325,7 +277,7 @@ class MP_PDE_Solver(torch.nn.Module):
         """
         u = torch.reshape(data.x, (data.x.shape[0], -1))
         # if DEBUG:
-        #     helper.save_ns(u.detach().numpy(), pathlib.Path('tmp'))
+        #     helper.save_mixture(u.detach().numpy(), pathlib.Path('tmp'))
         # Encode and normalize coordinate information
         pos = data.pos
         pos_x = pos[:, 1:]
@@ -368,7 +320,9 @@ class MP_PDE_Solver(torch.nn.Module):
         if DEBUG:
             print('At forward')
             print(u[100:110, 4:8])
-            helper.save_ns(out.detach().numpy(), pathlib.Path('tmp'))
-            helper.save_ns(diff.detach().numpy(), pathlib.Path('tmp/diff'))
+            # helper.save_mixture(
+            #     out.cpu().detach().numpy(), pathlib.Path('tmp'))
+            # helper.save_mixture(
+            #     diff.cpu().detach().numpy(), pathlib.Path('tmp/diff'))
 
         return out

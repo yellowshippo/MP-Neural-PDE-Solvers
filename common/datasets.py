@@ -10,10 +10,11 @@ from torch_geometric.data import Data
 from torch_cluster import radius_graph
 
 
-NS_STEP = 40
-NS_DT = .1
-NS_DX = (0.3337 + 0.8592) / 45
-T_RESOLUTION = NS_STEP
+MIXTURE_STEP = 80  # 8
+MIXTURE_DT = .2
+MIXTURE_DX = 1 / 20
+T_RESOLUTION = MIXTURE_STEP
+T_STRIDE = 2
 
 DEBUG = False
 
@@ -45,13 +46,15 @@ class NpyDataset(Dataset):
         self.pde = pde
         self.dtype = torch.float64
         self.tw = time_window
-        if self.pde == 'ns':
-            self.steps = NS_STEP
-            self.nt = NS_STEP + self.tw  # Take into account padding
-            self.dt = NS_DT
+        if self.pde == 'mixture':
+            self.steps = MIXTURE_STEP
+            self.nt = MIXTURE_STEP + self.tw  # Take into account padding
+            self.dt = MIXTURE_DT
             self.tmin = 0.
             self.tmax = self.nt * self.dt  # Take into account padding
-            self.required_file_name = 'nodal_U_step0.npy'
+            self.required_file_name = 'nodal_u.npy'
+        else:
+            raise ValueError('Unexpected pde: {self.pde}')
         self.data_directories = self._collect_directories(path)
         return
 
@@ -82,54 +85,76 @@ class NpyDataset(Dataset):
             torch.Tensor: spatial coordinates
             list: equation specific parameters
         """
-        if f'{self.pde}' == 'ns':
+        if f"{self.pde}" == 'mixture':
             data_directory = self.data_directories[idx]
             x = np.load(data_directory / 'node.npy')
+            u_all = np.concatenate(
+                [
+                    np.load(data_directory / 'nodal_u.npy')[
+                        ..., 0],
+                    np.load(data_directory / 'nodal_p.npy'),
+                    np.load(data_directory / 'nodal_alpha.npy'),
+                ], axis=-1)[::T_STRIDE]
             u_base = torch.from_numpy(np.stack(
                 [
-                    np.concatenate(
-                        [
-                            np.load(data_directory / f"nodal_U_step{i}.npy")[
-                                ..., 0],
-                            np.load(data_directory / f"nodal_p_step{i}.npy"),
-                        ], axis=-1)
-                    for i
-                    in [0] * (self.tw - 1) + list(range(self.steps + 1))],
+                    u_all[i] for i
+                    in [0] * (self.tw - 1) + list(range(len(u_all)))],
                 # Pad first step for temporal bundling
                 axis=0))
             u_super = u_base.clone()
 
-            dirichlet = np.concatenate(
+            padded_dirichlet = np.concatenate(
                 [
-                    np.load(data_directory / 'nodal_boundary_U.npy')[..., 0],
-                    np.load(data_directory / 'nodal_boundary_p.npy'),
+                    np.load(
+                        data_directory
+                        / 'nodal_padded_dirichlet_u.npy')[..., 0],
+                    np.load(
+                        data_directory
+                        / 'nodal_padded_dirichlet_p.npy'),
                 ], axis=-1)
-            dirichlet_flag = ~np.isnan(dirichlet)
-            dirichlet[np.isnan(dirichlet)] = 0.
+            dirichlet_flag = np.concatenate(
+                [
+                    np.load(
+                        data_directory
+                        / 'nodal_dirichlet_flag_u.npy')[..., 0],
+                    np.load(
+                        data_directory
+                        / 'nodal_dirichlet_flag_p.npy'),
+                ], axis=-1)
             normal = np.load(data_directory / 'normal.npy')[..., 0]
+            gravity = np.load(data_directory / 'nodal_gravity.npy')[..., 0]
+            gh = np.load(data_directory / 'nodal_gh.npy')
             scipy_adj = sp.load_npz(data_directory / 'nodal_adj.npz')
             adj = torch.sparse_coo_tensor(
                 np.stack([scipy_adj.row, scipy_adj.col], axis=0),
                 scipy_adj.data, scipy_adj.shape)
 
+            space_scale_factor = float(np.squeeze(
+                np.load(data_directory / 'space_scale_factor.npy')))
+            time_scale_factor = float(np.squeeze(
+                np.load(data_directory / 'time_scale_factor.npy')))
+            mass_scale_factor = float(np.squeeze(
+                np.load(data_directory / 'mass_scale_factor.npy')))
+
             variables = {
-                'dirichlet': torch.from_numpy(dirichlet),  # [n_node, 4]
+                'dirichlet': torch.from_numpy(padded_dirichlet),  # [n_node, 4]
                 'dirichlet_flag': torch.from_numpy(
                     dirichlet_flag.astype(np.float32)),  # [n_node, 4]
                 'normal': torch.from_numpy(normal),  # [n_node, 3]
-                'level1': torch.from_numpy(np.load(
-                    data_directory / 'nodal_level1.npy')),  # [n_node, 1]
-                'level2': torch.from_numpy(np.load(
-                    data_directory / 'nodal_level2.npy')),  # [n_node, 1]
-                'level0p5': torch.from_numpy(np.load(
-                    data_directory / 'nodal_level0p5.npy')),  # [n_node, 1]
+                'gravity': torch.from_numpy(gravity),  # [n_node, 3]
+                'gh': torch.from_numpy(gh),  # [n_node, 1]
                 'adj': adj,  # [n_node, n_node], sparse
+
+                # Scale factors
+                'space_scale_factor': space_scale_factor,
+                'time_scale_factor': time_scale_factor,
+                'mass_scale_factor': mass_scale_factor,
             }
 
             return u_base, u_super, x, variables
 
         else:
-            raise Exception("Wrong experiment: {self.pde}")
+            raise Exception(f"Wrong experiment: {self.pde}")
 
 
 class GraphCreator(nn.Module):
@@ -152,12 +177,12 @@ class GraphCreator(nn.Module):
         self.pde = pde
         self.n = neighbors
         self.tw = time_window
-        if self.pde == 'ns':
-            self.nt = NS_STEP + self.tw  # Take into account padding
-            self.dt = NS_DT
-            self.dx = NS_DX
+        if self.pde == 'mixture':
+            self.nt = MIXTURE_STEP + self.tw  # Take into account padding
+            self.dt = MIXTURE_DT
+            self.dx = MIXTURE_DX
             self.tmin = 0.
-            self.tmax = NS_STEP * NS_DT
+            self.tmax = MIXTURE_STEP * MIXTURE_DT
             self.t_res = T_RESOLUTION + self.tw
         else:
             raise ValueError(f"Invalid pde type: {self.pde}")
@@ -210,7 +235,9 @@ class GraphCreator(nn.Module):
         Returns:
             Data: Pytorch Geometric data graph
         """
-        t = torch.linspace(0, self.tmax, self.nt)
+        time_scale_factor = variables['time_scale_factor']
+        space_scale_factor = variables['time_scale_factor']
+        t = torch.linspace(0, self.tmax, self.nt) * time_scale_factor
         nx = x.shape[-2]
 
         u, x_pos, t_pos, y, batch = torch.Tensor(), torch.Tensor(), \
@@ -228,10 +255,11 @@ class GraphCreator(nn.Module):
             batch = torch.cat((batch, torch.ones(nx) * b))
 
         # Calculate the edge_index
-        if f'{self.pde}' == 'ns':
-            radius = (self.n + .01) * self.dx
+        if f'{self.pde}' == 'mixture':
+            radius = (self.n + .01) * self.dx * space_scale_factor
             edge_index = radius_graph(
-                x_pos, r=radius, batch=batch.long(), loop=False)
+                x_pos, r=radius, batch=batch.long(), loop=False,
+                max_num_neighbors=128)
             # NOTE: max_num_neighbors is 32 by default
 
         else:
@@ -241,12 +269,16 @@ class GraphCreator(nn.Module):
         graph.y = y
         graph.pos = torch.cat((t_pos, x_pos), -1)
         graph.batch = batch.long()
+        graph.time_scale_factor = time_scale_factor
 
         # Equation specific parameters
-        if self.pde == 'ns':
+        if self.pde == 'mixture':
             graph.parameters = torch.cat([
                 v for k, v in variables.items()
-                if k not in ['adj', 'data_directory']], -1)
+                if k not in [
+                    'adj', 'data_directory', 'space_scale_factor',
+                    'time_scale_factor', 'mass_scale_factor']
+            ], -1)
 
         else:
             raise ValueError(f"Invalid PDE type: {self.pde}")
@@ -278,7 +310,9 @@ class GraphCreator(nn.Module):
         graph.x = torch.cat(
             (graph.x.reshape(len(pred), -1), pred), 1)[:, pred.shape[-1]:]
         nx = pred.shape[0]
-        t = torch.linspace(self.tmin, self.tmax, self.nt)
+        t = torch.linspace(self.tmin, self.tmax, self.nt).to(labels.device) \
+            * graph.time_scale_factor.to(labels.device)
+
         # Update labels and input timesteps
         y, t_pos = torch.Tensor(), torch.Tensor()
         for (labels_batch, step) in zip(labels, steps):
